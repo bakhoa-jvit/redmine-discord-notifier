@@ -50,9 +50,10 @@ Set this variable in Railway:
 
 ```env
 SQLITE_PATH=/app/data/notifier.sqlite
+PROJECTS_CONFIG_JSON=[{"id":"data-index","discordWebhookUrl":"https://discord.com/api/webhooks/...","events":["comment_added","status_changed"]}]
 ```
 
-Also add the other `.env` values as Railway variables and provide `config/projects.json` through your deploy process or repository-safe template. Do not commit real API keys or webhook URLs.
+Also add the other `.env` values as Railway variables. On Railway, prefer `PROJECTS_CONFIG_JSON` so you do not need to commit `config/projects.json` or webhook URLs.
 
 ## Testing Against Real Redmine
 
@@ -101,6 +102,8 @@ Supported event types:
 - `priority_changed`
 
 SQLite path and other runtime settings stay in `.env`. To use a different project config path, set `PROJECTS_CONFIG_FILE`. The default is `./config/projects.json`.
+
+For hosted platforms such as Railway, you can skip the file and set `PROJECTS_CONFIG_JSON` directly as a secret variable. `PROJECTS_CONFIG_JSON` takes priority over `PROJECTS_CONFIG_FILE`.
 
 ## Useful Commands
 

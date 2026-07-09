@@ -44,6 +44,28 @@ test("loads runtime config from env and projects from JSON file", () => {
   assert.equal(config.projects[1]?.events.includes("issue_created"), true);
 });
 
+test("loads projects from PROJECTS_CONFIG_JSON before file", () => {
+  const filePath = writeProjects("ignored-projects.json", [
+    { id: "from-file", discordWebhookUrl: "https://discord.com/api/webhooks/file" },
+  ]);
+
+  const config = loadConfig({
+    ...baseEnv,
+    PROJECTS_CONFIG_FILE: filePath,
+    PROJECTS_CONFIG_JSON: JSON.stringify([
+      {
+        id: "from-env",
+        discordWebhookUrl: "https://discord.com/api/webhooks/env",
+        events: ["comment_added"],
+      },
+    ]),
+  });
+
+  assert.equal(config.projects.length, 1);
+  assert.equal(config.projects[0]?.id, "from-env");
+  assert.deepEqual(config.projects[0]?.events, ["comment_added"]);
+});
+
 test("rejects duplicate project ids", () => {
   const path = writeProjects("duplicate-projects.json", [
     { id: "data-index", discordWebhookUrl: "https://discord.com/api/webhooks/data" },

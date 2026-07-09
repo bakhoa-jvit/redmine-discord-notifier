@@ -36,7 +36,6 @@ const defaultEvents: EventType[] = [
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const startupMode = parseStartupMode(env.STARTUP_MODE || "baseline");
-  const projectsConfigPath = env.PROJECTS_CONFIG_FILE?.trim() || "./config/projects.json";
 
   const sqlitePath = env.SQLITE_PATH || "./data/notifier.sqlite";
   const logLevel = parseLogLevel(env.LOG_LEVEL || "info");
@@ -55,8 +54,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sqlitePath,
     startupMode,
     logLevel,
-    projects: parseProjectsFile(projectsConfigPath),
+    projects: loadProjects(env),
   };
+}
+
+function loadProjects(env: NodeJS.ProcessEnv): ProjectConfig[] {
+  if (env.PROJECTS_CONFIG_JSON && env.PROJECTS_CONFIG_JSON.trim() !== "") {
+    return parseProjectsJson(env.PROJECTS_CONFIG_JSON, "PROJECTS_CONFIG_JSON");
+  }
+
+  const projectsConfigPath = env.PROJECTS_CONFIG_FILE?.trim() || "./config/projects.json";
+  return parseProjectsFile(projectsConfigPath);
 }
 
 function parseProjectsFile(path: string): ProjectConfig[] {
@@ -71,15 +79,19 @@ function parseProjectsFile(path: string): ProjectConfig[] {
     );
   }
 
+  return parseProjectsJson(value, path);
+}
+
+function parseProjectsJson(value: string, source: string): ProjectConfig[] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value) as unknown;
   } catch (error) {
     throw new Error(
-      `${path} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+      `${source} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
-  return parseProjects(parsed, path);
+  return parseProjects(parsed, source);
 }
 
 interface RawProjectConfig {
