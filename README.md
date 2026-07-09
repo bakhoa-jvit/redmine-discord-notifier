@@ -38,6 +38,22 @@ docker compose up --build
 
 SQLite data is stored in `./data/notifier.sqlite` by default and mounted into the container.
 
+## Railway
+
+Railway does not use Dockerfile `VOLUME`. Configure a Railway Volume in the Railway UI and mount it at:
+
+```text
+/app/data
+```
+
+Set this variable in Railway:
+
+```env
+SQLITE_PATH=/app/data/notifier.sqlite
+```
+
+Also add the other `.env` values as Railway variables and provide `config/projects.json` through your deploy process or repository-safe template. Do not commit real API keys or webhook URLs.
+
 ## Testing Against Real Redmine
 
 Use `.env` for shared runtime settings:
