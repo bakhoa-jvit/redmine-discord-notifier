@@ -1,8 +1,18 @@
 services:
   redmine-discord-notifier:
     build: .
-    env_file:
-      - .env
+    environment:
+      REDMINE_BASE_URL: ${REDMINE_BASE_URL}
+      REDMINE_API_KEY: ${REDMINE_API_KEY}
+      PROJECTS_CONFIG_FILE: ${PROJECTS_CONFIG_FILE:-./config/projects.json}
+      PROJECTS_CONFIG_JSON: ${PROJECTS_CONFIG_JSON:-}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-60}
+      POLL_OVERLAP_SECONDS: ${POLL_OVERLAP_SECONDS:-120}
+      REDMINE_PAGE_LIMIT: ${REDMINE_PAGE_LIMIT:-100}
+      MAX_ISSUE_DETAIL_REQUESTS_PER_CYCLE: ${MAX_ISSUE_DETAIL_REQUESTS_PER_CYCLE:-200}
+      SQLITE_PATH: ${SQLITE_PATH:-./data/notifier.sqlite}
+      STARTUP_MODE: ${STARTUP_MODE:-baseline}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
       - ./config/projects.json:/app/config/projects.json:ro
       - ./data:/app/data
