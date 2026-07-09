@@ -1,0 +1,21 @@
+[
+  {
+    "id": "doctor-health",
+    "discordWebhookUrl": "https://discord.com/api/webhooks/replace/me",
+    "events": [
+      "issue_created",
+      "comment_added",
+      "status_changed",
+      "assignee_changed",
+      "priority_changed"
+    ]
+  },
+  {
+    "id": "another-project",
+    "discordWebhookUrl": "https://discord.com/api/webhooks/replace/me-too",
+    "events": [
+      "comment_added",
+      "status_changed"
+    ]
+  }
+]

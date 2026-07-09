@@ -1,0 +1,114 @@
+import type { AppConfig, ProjectConfig } from "./config.js";
+import { detectEvents, maxJournalId } from "./detection/eventDetector.js";
+import { formatDiscordPayload } from "./discord/formatter.js";
+import type { Logger } from "./logger.js";
+import type { RedmineClient } from "./redmine/client.js";
+import type { OutboxRepository, StateRepository } from "./state/repositories.js";
+import { addMs, maxIso, nowIso } from "./time.js";
+
+export class Poller {
+  constructor(
+    private readonly config: AppConfig,
+    private readonly redmine: RedmineClient,
+    private readonly state: StateRepository,
+    private readonly outbox: OutboxRepository,
+    private readonly logger: Logger,
+  ) {}
+
+  async initializeProjects(): Promise<void> {
+    for (const project of this.config.projects) {
+      const current = this.state.getProject(project.id);
+      if (current?.initialized) {
+        continue;
+      }
+      const baselineAt = nowIso();
+      this.state.initializeProject(project.id, baselineAt);
+      this.logger.info("Initialized project baseline", { projectId: project.id, baselineAt });
+    }
+  }
+
+  async pollOnce(): Promise<void> {
+    for (const project of this.config.projects) {
+      await this.pollProject(project);
+    }
+  }
+
+  private async pollProject(project: ProjectConfig): Promise<void> {
+    const projectState = this.state.getProject(project.id);
+    if (!projectState?.initialized || !projectState.baselineAt || !projectState.lastCompletedWatermark) {
+      throw new Error(`Project is not initialized: ${project.id}`);
+    }
+
+    const pollStartedAt = nowIso();
+    const updatedFrom = addMs(projectState.lastCompletedWatermark, -this.config.pollOverlapMs);
+    const updatedTo = pollStartedAt;
+    let offset = 0;
+    let maxProcessedUpdatedOn = projectState.lastCompletedWatermark;
+    let detailRequests = 0;
+
+    this.state.markPollStarted(project.id, pollStartedAt);
+
+    try {
+      while (true) {
+        const page = await this.redmine.listChangedIssues({
+          projectId: project.id,
+          updatedFrom,
+          updatedTo,
+          limit: this.config.redminePageLimit,
+          offset,
+        });
+
+        for (const listedIssue of page.issues) {
+          if (detailRequests >= this.config.maxIssueDetailRequestsPerCycle) {
+            this.logger.warn("Reached max issue detail requests for cycle", {
+              projectId: project.id,
+              detailRequests,
+            });
+            this.state.completePoll(project.id, maxProcessedUpdatedOn);
+            return;
+          }
+
+          detailRequests += 1;
+          const issueState = this.state.getIssue(project.id, listedIssue.id);
+          const issue = await this.redmine.getIssueWithJournals(listedIssue.id);
+          const events = detectEvents({
+            project,
+            issue,
+            issueUrl: this.redmine.issueUrl(issue.id),
+            baselineAt: projectState.baselineAt,
+            knownIssue: issueState !== null,
+            lastSeenJournalId: issueState?.lastSeenJournalId ?? null,
+          });
+
+          for (const event of events) {
+            const payload = formatDiscordPayload(event);
+            const enqueued = this.outbox.enqueue(event, payload);
+            if (enqueued) {
+              this.logger.info("Queued notification", {
+                projectId: project.id,
+                issueId: event.issueId,
+                eventType: event.eventType,
+                eventKey: event.eventKey,
+              });
+            }
+          }
+
+          this.state.upsertIssue(project.id, issue.id, issue.updated_on, maxJournalId(issue));
+          maxProcessedUpdatedOn = maxIso(maxProcessedUpdatedOn, issue.updated_on);
+        }
+
+        offset += page.limit;
+        if (offset >= page.total_count || page.issues.length === 0) {
+          break;
+        }
+      }
+
+      this.state.completePoll(project.id, maxProcessedUpdatedOn);
+      this.logger.debug("Completed poll", { projectId: project.id, watermark: maxProcessedUpdatedOn });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.state.failPoll(project.id, message);
+      this.logger.error("Poll failed", { projectId: project.id, error: message });
+    }
+  }
+}

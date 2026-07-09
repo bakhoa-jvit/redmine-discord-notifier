@@ -1,0 +1,9 @@
+services:
+  redmine-discord-notifier:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./config/projects.json:/app/config/projects.json:ro
+      - ./data:/app/data
+    restart: unless-stopped
