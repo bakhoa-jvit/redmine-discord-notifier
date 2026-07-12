@@ -1,4 +1,11 @@
-import type { RedmineIssue, RedmineIssueListResponse, RedmineIssueResponse } from "./types.js";
+import type {
+  RedmineIssue,
+  RedmineIssueListResponse,
+  RedmineIssuePriorityListResponse,
+  RedmineIssueResponse,
+  RedmineIssueStatusListResponse,
+  RedmineNamedRef,
+} from "./types.js";
 
 export interface ListChangedIssuesInput {
   projectId: string;
@@ -25,7 +32,9 @@ export class RedmineClient {
     });
     const response = await this.get<RedmineIssueListResponse>(`/issues.json?${params.toString()}`);
     response.issues = response.issues.filter(
-      (issue) => new Date(issue.updated_on).getTime() <= new Date(input.updatedTo).getTime(),
+      (issue) =>
+        new Date(issue.updated_on).getTime() >= new Date(input.updatedFrom).getTime() &&
+        new Date(issue.updated_on).getTime() <= new Date(input.updatedTo).getTime(),
     );
     return response;
   }
@@ -38,6 +47,16 @@ export class RedmineClient {
 
   issueUrl(issueId: number): string {
     return `${this.baseUrl}/issues/${issueId}`;
+  }
+
+  async listIssueStatuses(): Promise<RedmineNamedRef[]> {
+    const response = await this.get<RedmineIssueStatusListResponse>("/issue_statuses.json");
+    return response.issue_statuses;
+  }
+
+  async listIssuePriorities(): Promise<RedmineNamedRef[]> {
+    const response = await this.get<RedmineIssuePriorityListResponse>("/enumerations/issue_priorities.json");
+    return response.issue_priorities;
   }
 
   private async get<T>(path: string): Promise<T> {

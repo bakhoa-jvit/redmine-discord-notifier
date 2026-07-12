@@ -1,6 +1,6 @@
 [
   {
-    "id": "doctor-health",
+    "id": "data-index",
     "discordWebhookUrl": "https://discord.com/api/webhooks/replace/me",
     "events": [
       "issue_created",
@@ -8,7 +8,10 @@
       "status_changed",
       "assignee_changed",
       "priority_changed"
-    ]
+    ],
+    "assigneeDiscordIds": {
+      "7": { "discordId": "123456789012345678", "note": "Linh" }
+    }
   },
   {
     "id": "another-project",

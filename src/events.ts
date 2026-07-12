@@ -10,6 +10,7 @@ export interface DetectedEvent {
   issueUrl: string;
   issueSubject: string;
   authorName: string | null;
+  assigneeDiscordId?: string | null;
   notes?: string;
   field?: string;
   oldValue?: string | null;
