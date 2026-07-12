@@ -43,3 +43,11 @@ export interface RedmineIssueListResponse {
 export interface RedmineIssueResponse {
   issue: RedmineIssue;
 }
+
+export interface RedmineIssueStatusListResponse {
+  issue_statuses: RedmineNamedRef[];
+}
+
+export interface RedmineIssuePriorityListResponse {
+  issue_priorities: RedmineNamedRef[];
+}

@@ -24,6 +24,9 @@ test("detects issue creation after baseline", () => {
     baselineAt: "2026-07-09T01:00:00.000Z",
     knownIssue: false,
     lastSeenJournalId: null,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map(),
   });
 
   assert.equal(events.length, 1);
@@ -55,12 +58,113 @@ test("detects comments and tracked field changes from new journals", () => {
     baselineAt: "2026-07-09T01:00:00.000Z",
     knownIssue: true,
     lastSeenJournalId: 9,
+    statusNames: new Map([
+      [1, "New"],
+      [2, "In Progress"],
+    ]),
+    priorityNames: new Map([
+      [3, "Low"],
+      [4, "High"],
+    ]),
+    assigneeDiscordIds: new Map(),
   });
 
   assert.deepEqual(
     events.map((event) => event.eventType),
     ["comment_added", "status_changed", "priority_changed"],
   );
+
+  const statusEvent = events[1];
+  assert.equal(statusEvent?.oldValue, "New");
+  assert.equal(statusEvent?.newValue, "In Progress");
+
+  const priorityEvent = events[2];
+  assert.equal(priorityEvent?.oldValue, "Low");
+  assert.equal(priorityEvent?.newValue, "High");
+});
+
+test("falls back to a placeholder for unmapped status/priority ids", () => {
+  const issue = makeIssue({
+    journals: [
+      {
+        id: 10,
+        created_on: "2026-07-09T01:05:00.000Z",
+        details: [{ property: "attr", name: "status_id", old_value: "1", new_value: "99" }],
+      },
+    ],
+  });
+
+  const events = detectEvents({
+    project,
+    issue,
+    issueUrl: "https://redmine.example.com/issues/123",
+    baselineAt: "2026-07-09T01:00:00.000Z",
+    knownIssue: true,
+    lastSeenJournalId: 9,
+    statusNames: new Map([[1, "New"]]),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map(),
+  });
+
+  assert.equal(events[0]?.oldValue, "New");
+  assert.equal(events[0]?.newValue, "Status #99");
+});
+
+test("resolves assignee changes using the current issue's assigned_to, falling back to a placeholder", () => {
+  const issue = makeIssue({
+    assigned_to: { id: 7, name: "Linh" },
+    journals: [
+      {
+        id: 10,
+        created_on: "2026-07-09T01:05:00.000Z",
+        details: [{ property: "attr", name: "assigned_to_id", old_value: "5", new_value: "7" }],
+      },
+    ],
+  });
+
+  const events = detectEvents({
+    project,
+    issue,
+    issueUrl: "https://redmine.example.com/issues/123",
+    baselineAt: "2026-07-09T01:00:00.000Z",
+    knownIssue: true,
+    lastSeenJournalId: 9,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map([[7, "123456789012345678"]]),
+  });
+
+  assert.equal(events[0]?.eventType, "assignee_changed");
+  assert.equal(events[0]?.oldValue, "User #5");
+  assert.equal(events[0]?.newValue, "Linh");
+  assert.equal(events[0]?.assigneeDiscordId, "123456789012345678");
+});
+
+test("leaves assigneeDiscordId null when the current assignee has no mapping", () => {
+  const issue = makeIssue({
+    assigned_to: { id: 7, name: "Linh" },
+    journals: [
+      {
+        id: 10,
+        created_on: "2026-07-09T01:05:00.000Z",
+        notes: "unmapped assignee",
+      },
+    ],
+  });
+
+  const events = detectEvents({
+    project,
+    issue,
+    issueUrl: "https://redmine.example.com/issues/123",
+    baselineAt: "2026-07-09T01:00:00.000Z",
+    knownIssue: true,
+    lastSeenJournalId: 9,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map([[99, "123456789012345678"]]),
+  });
+
+  assert.equal(events[0]?.assigneeDiscordId, null);
 });
 
 test("skips old journals and blank comments", () => {
@@ -88,6 +192,9 @@ test("skips old journals and blank comments", () => {
     baselineAt: "2026-07-09T01:00:00.000Z",
     knownIssue: true,
     lastSeenJournalId: 8,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map(),
   });
 
   assert.equal(events.length, 0);
@@ -112,6 +219,9 @@ test("respects configured event types", () => {
     baselineAt: "2026-07-09T01:00:00.000Z",
     knownIssue: true,
     lastSeenJournalId: null,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: new Map(),
   });
 
   assert.deepEqual(events.map((event) => event.eventType), ["comment_added"]);

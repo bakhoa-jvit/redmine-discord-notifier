@@ -12,6 +12,8 @@ interface DiscordEmbed {
 
 export interface DiscordWebhookPayload {
   username: string;
+  content?: string;
+  allowed_mentions?: { parse: []; users: string[] };
   embeds: DiscordEmbed[];
 }
 
@@ -32,29 +34,39 @@ const titles: Record<DetectedEvent["eventType"], string> = {
 };
 
 export function formatDiscordPayload(event: DetectedEvent): DiscordWebhookPayload {
-  const fields = [
-    { name: "Issue", value: `#${event.issueId} ${event.issueSubject}`, inline: false },
-  ];
+  const issueSubject = escapeDiscordMarkdown(event.issueSubject);
+  const authorName = event.authorName ? escapeDiscordMarkdown(event.authorName) : null;
+  const notes = event.notes ? escapeDiscordMarkdown(event.notes) : undefined;
 
-  if (event.authorName) {
-    fields.push({ name: "Author", value: event.authorName, inline: true });
+  const fields = [{ name: "Issue", value: `#${event.issueId} ${issueSubject}`, inline: false }];
+
+  if (authorName) {
+    fields.push({ name: "Author", value: authorName, inline: true });
   }
 
   if (event.oldValue !== undefined || event.newValue !== undefined) {
+    const oldValue = event.oldValue ? escapeDiscordMarkdown(event.oldValue) : event.oldValue;
+    const newValue = event.newValue ? escapeDiscordMarkdown(event.newValue) : event.newValue;
     fields.push({
       name: "Change",
-      value: `${event.oldValue ?? "(empty)"} -> ${event.newValue ?? "(empty)"}`,
+      value: `${oldValue ?? "(empty)"} -> ${newValue ?? "(empty)"}`,
       inline: false,
     });
   }
 
   return {
     username: "Redmine",
+    ...(event.assigneeDiscordId
+      ? {
+          content: `<@${event.assigneeDiscordId}>`,
+          allowed_mentions: { parse: [] as [], users: [event.assigneeDiscordId] },
+        }
+      : {}),
     embeds: [
       {
         title: titles[event.eventType],
         url: event.issueUrl,
-        description: event.notes ? truncate(event.notes, 3500) : undefined,
+        description: notes ? truncate(notes, 3500) : undefined,
         color: colors[event.eventType],
         fields,
         footer: { text: event.eventKey },
@@ -62,6 +74,12 @@ export function formatDiscordPayload(event: DetectedEvent): DiscordWebhookPayloa
       },
     ],
   };
+}
+
+const markdownSpecialChars = /[\\`*_~|[\]()<>]/g;
+
+function escapeDiscordMarkdown(value: string): string {
+  return value.replace(markdownSpecialChars, (char) => `\\${char}`);
 }
 
 function truncate(value: string, maxLength: number): string {

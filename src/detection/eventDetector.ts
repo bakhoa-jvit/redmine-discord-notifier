@@ -10,6 +10,9 @@ export interface DetectEventsInput {
   baselineAt: string;
   knownIssue: boolean;
   lastSeenJournalId: number | null;
+  statusNames: Map<number, string>;
+  priorityNames: Map<number, string>;
+  assigneeDiscordIds: Map<number, string>;
 }
 
 const detailEventMap: Record<string, EventType> = {
@@ -21,6 +24,7 @@ const detailEventMap: Record<string, EventType> = {
 export function detectEvents(input: DetectEventsInput): DetectedEvent[] {
   const enabled = new Set(input.project.events);
   const events: DetectedEvent[] = [];
+  const assigneeDiscordId = resolveAssigneeDiscordId(input.issue, input.assigneeDiscordIds);
 
   if (
     !input.knownIssue &&
@@ -37,6 +41,7 @@ export function detectEvents(input: DetectEventsInput): DetectedEvent[] {
       issueUrl: input.issueUrl,
       issueSubject: input.issue.subject,
       authorName: input.issue.author?.name ?? null,
+      assigneeDiscordId,
     });
   }
 
@@ -56,6 +61,7 @@ export function detectEvents(input: DetectEventsInput): DetectedEvent[] {
         issueUrl: input.issueUrl,
         issueSubject: input.issue.subject,
         authorName: journal.user?.name ?? null,
+        assigneeDiscordId,
         notes: journal.notes.trim(),
       });
     }
@@ -100,6 +106,7 @@ function buildDetailEvent(
   detail: RedmineJournalDetail,
   eventType: EventType,
 ): DetectedEvent {
+  const { oldValue, newValue } = resolveDetailValues(input, detail);
   return {
     eventKey: buildJournalKey(input.project.id, input.issue.id, journal.id, `field:${detail.name}`),
     projectId: input.project.id,
@@ -110,10 +117,68 @@ function buildDetailEvent(
     issueUrl: input.issueUrl,
     issueSubject: input.issue.subject,
     authorName: journal.user?.name ?? null,
+    assigneeDiscordId: resolveAssigneeDiscordId(input.issue, input.assigneeDiscordIds),
     field: detail.name,
-    oldValue: detail.old_value ?? null,
-    newValue: detail.new_value ?? null,
+    oldValue,
+    newValue,
   };
+}
+
+function resolveAssigneeDiscordId(issue: RedmineIssue, assigneeDiscordIds: Map<number, string>): string | null {
+  if (!issue.assigned_to) {
+    return null;
+  }
+  return assigneeDiscordIds.get(issue.assigned_to.id) ?? null;
+}
+
+function resolveDetailValues(
+  input: DetectEventsInput,
+  detail: RedmineJournalDetail,
+): { oldValue: string | null; newValue: string | null } {
+  switch (detail.name) {
+    case "status_id":
+      return {
+        oldValue: resolveNamedId(detail.old_value, input.statusNames, "Status"),
+        newValue: resolveNamedId(detail.new_value, input.statusNames, "Status"),
+      };
+    case "priority_id":
+      return {
+        oldValue: resolveNamedId(detail.old_value, input.priorityNames, "Priority"),
+        newValue: resolveNamedId(detail.new_value, input.priorityNames, "Priority"),
+      };
+    case "assigned_to_id":
+      return {
+        oldValue: resolveAssignee(detail.old_value, input.issue),
+        newValue: resolveAssignee(detail.new_value, input.issue),
+      };
+    default:
+      return { oldValue: detail.old_value ?? null, newValue: detail.new_value ?? null };
+  }
+}
+
+function resolveNamedId(value: string | undefined, names: Map<number, string>, label: string): string | null {
+  if (value === undefined || value === "") {
+    return null;
+  }
+  const id = Number.parseInt(value, 10);
+  if (Number.isNaN(id)) {
+    return value;
+  }
+  return names.get(id) ?? `${label} #${id}`;
+}
+
+function resolveAssignee(value: string | undefined, issue: RedmineIssue): string | null {
+  if (value === undefined || value === "") {
+    return null;
+  }
+  const id = Number.parseInt(value, 10);
+  if (Number.isNaN(id)) {
+    return value;
+  }
+  if (issue.assigned_to?.id === id) {
+    return issue.assigned_to.name;
+  }
+  return `User #${id}`;
 }
 
 function buildIssueCreatedKey(projectId: string, issueId: number): string {

@@ -3,22 +3,37 @@ import { detectEvents, maxJournalId } from "./detection/eventDetector.js";
 import { formatDiscordPayload } from "./discord/formatter.js";
 import type { Logger } from "./logger.js";
 import type { RedmineClient } from "./redmine/client.js";
+import { ReferenceDataCache } from "./redmine/referenceData.js";
 import type { OutboxRepository, StateRepository } from "./state/repositories.js";
-import { addMs, maxIso, nowIso } from "./time.js";
+import { addMs, isAfter, maxIso, nowIso } from "./time.js";
 
 export class Poller {
+  private readonly referenceData: ReferenceDataCache;
+  private readonly serviceStartedAt = nowIso();
+
   constructor(
     private readonly config: AppConfig,
     private readonly redmine: RedmineClient,
     private readonly state: StateRepository,
     private readonly outbox: OutboxRepository,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.referenceData = new ReferenceDataCache(redmine);
+  }
 
   async initializeProjects(): Promise<void> {
+    await this.referenceData.refresh();
+
     for (const project of this.config.projects) {
       const current = this.state.getProject(project.id);
       if (current?.initialized) {
+        if (this.config.skipMissedOnStart) {
+          this.state.completePoll(project.id, this.serviceStartedAt);
+          this.logger.info("Skipped missed activity before service start", {
+            projectId: project.id,
+            skippedBefore: this.serviceStartedAt,
+          });
+        }
         continue;
       }
       const baselineAt = nowIso();
@@ -34,21 +49,22 @@ export class Poller {
   }
 
   private async pollProject(project: ProjectConfig): Promise<void> {
-    const projectState = this.state.getProject(project.id);
-    if (!projectState?.initialized || !projectState.baselineAt || !projectState.lastCompletedWatermark) {
-      throw new Error(`Project is not initialized: ${project.id}`);
-    }
-
     const pollStartedAt = nowIso();
-    const updatedFrom = addMs(projectState.lastCompletedWatermark, -this.config.pollOverlapMs);
-    const updatedTo = pollStartedAt;
-    let offset = 0;
-    let maxProcessedUpdatedOn = projectState.lastCompletedWatermark;
-    let detailRequests = 0;
-
-    this.state.markPollStarted(project.id, pollStartedAt);
 
     try {
+      const projectState = this.state.getProject(project.id);
+      if (!projectState?.initialized || !projectState.baselineAt || !projectState.lastCompletedWatermark) {
+        throw new Error(`Project is not initialized: ${project.id}`);
+      }
+
+      const updatedFrom = addMs(projectState.lastCompletedWatermark, -this.config.pollOverlapMs);
+      const updatedTo = pollStartedAt;
+      let offset = 0;
+      let maxProcessedUpdatedOn = projectState.lastCompletedWatermark;
+      let detailRequests = 0;
+
+      this.state.markPollStarted(project.id, pollStartedAt);
+
       while (true) {
         const page = await this.redmine.listChangedIssues({
           projectId: project.id,
@@ -59,6 +75,19 @@ export class Poller {
         });
 
         for (const listedIssue of page.issues) {
+          const issueState = this.state.getIssue(project.id, listedIssue.id);
+          const effectiveBaselineAt = this.effectiveBaselineAt(projectState.baselineAt);
+
+          if (this.config.skipMissedOnStart && !isAfter(listedIssue.updated_on, this.serviceStartedAt)) {
+            maxProcessedUpdatedOn = maxIso(maxProcessedUpdatedOn, listedIssue.updated_on);
+            continue;
+          }
+
+          if (issueState && !isAfter(listedIssue.updated_on, issueState.lastSeenUpdatedOn)) {
+            maxProcessedUpdatedOn = maxIso(maxProcessedUpdatedOn, listedIssue.updated_on);
+            continue;
+          }
+
           if (detailRequests >= this.config.maxIssueDetailRequestsPerCycle) {
             this.logger.warn("Reached max issue detail requests for cycle", {
               projectId: project.id,
@@ -69,15 +98,17 @@ export class Poller {
           }
 
           detailRequests += 1;
-          const issueState = this.state.getIssue(project.id, listedIssue.id);
           const issue = await this.redmine.getIssueWithJournals(listedIssue.id);
           const events = detectEvents({
             project,
             issue,
             issueUrl: this.redmine.issueUrl(issue.id),
-            baselineAt: projectState.baselineAt,
+            baselineAt: effectiveBaselineAt,
             knownIssue: issueState !== null,
             lastSeenJournalId: issueState?.lastSeenJournalId ?? null,
+            statusNames: this.referenceData.getStatusNames(),
+            priorityNames: this.referenceData.getPriorityNames(),
+            assigneeDiscordIds: project.assigneeDiscordIds,
           });
 
           for (const event of events) {
@@ -110,5 +141,12 @@ export class Poller {
       this.state.failPoll(project.id, message);
       this.logger.error("Poll failed", { projectId: project.id, error: message });
     }
+  }
+
+  private effectiveBaselineAt(projectBaselineAt: string): string {
+    if (!this.config.skipMissedOnStart) {
+      return projectBaselineAt;
+    }
+    return isAfter(this.serviceStartedAt, projectBaselineAt) ? this.serviceStartedAt : projectBaselineAt;
   }
 }
