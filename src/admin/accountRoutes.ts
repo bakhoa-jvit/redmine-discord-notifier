@@ -59,5 +59,6 @@ function renderAccountForm(csrfToken: string, error?: string, success?: string):
       <div class="actions"><button type="submit">Change password</button></div>
     </form>
   `,
+    { csrfToken },
   );
 }

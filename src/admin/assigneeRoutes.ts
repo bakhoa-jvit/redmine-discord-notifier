@@ -72,5 +72,6 @@ function renderAssigneesPage(configRepository: ConfigRepository, csrfToken: stri
       <tbody>${rows}</tbody>
     </table>
   `,
+    { csrfToken },
   );
 }
