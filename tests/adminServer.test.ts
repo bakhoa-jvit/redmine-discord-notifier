@@ -180,3 +180,55 @@ test("creates and deletes an assignee mapping", async () => {
   await ctx.close();
   ctx.db.close();
 });
+
+test("changes the admin password and can log in with the new one", async () => {
+  const ctx = await startServer();
+  const result = await login(ctx.baseUrl, "admin", "correct-horse-battery-staple");
+
+  const accountPage = await fetch(`${ctx.baseUrl}/account`, { headers: { Cookie: result.cookies } });
+  const csrf = extractCsrf(await accountPage.text());
+
+  const changeResponse = await fetch(`${ctx.baseUrl}/account/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: result.cookies },
+    body: new URLSearchParams({
+      currentPassword: "correct-horse-battery-staple",
+      newPassword: "new-correct-horse-staple",
+      confirmPassword: "new-correct-horse-staple",
+      _csrf: csrf,
+    }).toString(),
+  });
+  assert.equal(changeResponse.status, 200);
+  assert.match(await changeResponse.text(), /Password updated/);
+
+  const oldPasswordLogin = await login(ctx.baseUrl, "admin", "correct-horse-battery-staple");
+  assert.equal(oldPasswordLogin.status, 401);
+
+  const newPasswordLogin = await login(ctx.baseUrl, "admin", "new-correct-horse-staple");
+  assert.equal(newPasswordLogin.status, 302);
+
+  await ctx.close();
+  ctx.db.close();
+});
+
+test("rejects a password change with the wrong current password", async () => {
+  const ctx = await startServer();
+  const result = await login(ctx.baseUrl, "admin", "correct-horse-battery-staple");
+
+  const accountPage = await fetch(`${ctx.baseUrl}/account`, { headers: { Cookie: result.cookies } });
+  const csrf = extractCsrf(await accountPage.text());
+
+  const changeResponse = await fetch(`${ctx.baseUrl}/account/password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: result.cookies },
+    body: new URLSearchParams({
+      currentPassword: "not-the-real-password",
+      newPassword: "new-correct-horse-staple",
+      confirmPassword: "new-correct-horse-staple",
+      _csrf: csrf,
+    }).toString(),
+  });
+  assert.equal(changeResponse.status, 400);
+  await ctx.close();
+  ctx.db.close();
+});
