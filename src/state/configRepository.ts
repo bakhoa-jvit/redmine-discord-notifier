@@ -87,7 +87,7 @@ export class ConfigRepository {
     return result;
   }
 
-  upsertAssignee(input: { redmineUserId: number; discordId: string; note: string | null }): void {
+  upsertAssignee(input: { redmineUserId: string; discordId: string; note: string | null }): void {
     const redmineUserId = validateRedmineUserId(input.redmineUserId);
     const discordId = validateDiscordId(input.discordId);
     const now = nowIso();
@@ -149,11 +149,13 @@ function validateEvents(events: string[]): EventType[] {
   });
 }
 
-function validateRedmineUserId(value: number): number {
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new ValidationError("Redmine user id must be a positive integer");
+function validateRedmineUserId(value: string): number {
+  const trimmed = value.trim();
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0 || String(parsed) !== trimmed) {
+    throw new ValidationError(`Redmine user id "${value}" must be a positive integer`);
   }
-  return value;
+  return parsed;
 }
 
 function validateDiscordId(value: string): string {

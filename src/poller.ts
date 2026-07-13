@@ -12,7 +12,8 @@ export function initializeNewProjects(
   projects: ProjectConfig[],
   state: StateRepository,
   logger: Logger,
-): void {
+): string[] {
+  const initializedProjectIds: string[] = [];
   for (const project of projects) {
     if (state.getProject(project.id)) {
       continue;
@@ -20,7 +21,9 @@ export function initializeNewProjects(
     const baselineAt = nowIso();
     state.initializeProject(project.id, baselineAt);
     logger.info("Initialized project baseline", { projectId: project.id, baselineAt });
+    initializedProjectIds.push(project.id);
   }
+  return initializedProjectIds;
 }
 
 export class Poller {
@@ -41,27 +44,30 @@ export class Poller {
   async initializeProjects(): Promise<void> {
     await this.referenceData.refresh();
 
-    for (const project of this.configRepository.listProjects()) {
-      const current = this.state.getProject(project.id);
-      if (current?.initialized) {
-        if (this.config.skipMissedOnStart) {
-          this.state.completePoll(project.id, this.serviceStartedAt);
-          this.logger.info("Skipped missed activity before service start", {
-            projectId: project.id,
-            skippedBefore: this.serviceStartedAt,
-          });
-        }
-        continue;
+    const projects = this.configRepository.listProjects();
+    const alreadyInitializedIds = projects
+      .filter((project) => this.state.getProject(project.id)?.initialized)
+      .map((project) => project.id);
+
+    initializeNewProjects(projects, this.state, this.logger);
+
+    if (this.config.skipMissedOnStart) {
+      for (const projectId of alreadyInitializedIds) {
+        this.state.completePoll(projectId, this.serviceStartedAt);
+        this.logger.info("Skipped missed activity before service start", {
+          projectId,
+          skippedBefore: this.serviceStartedAt,
+        });
       }
-      const baselineAt = nowIso();
-      this.state.initializeProject(project.id, baselineAt);
-      this.logger.info("Initialized project baseline", { projectId: project.id, baselineAt });
     }
   }
 
   async pollOnce(): Promise<void> {
     const projects = this.configRepository.listProjects();
-    initializeNewProjects(projects, this.state, this.logger);
+    const newlyInitializedIds = initializeNewProjects(projects, this.state, this.logger);
+    if (newlyInitializedIds.length > 0) {
+      await this.referenceData.refresh();
+    }
     const assigneeDiscordIds = this.configRepository.getAssigneeDiscordIds();
 
     for (const project of projects) {

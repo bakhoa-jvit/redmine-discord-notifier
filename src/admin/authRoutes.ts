@@ -41,7 +41,11 @@ export function createAuthRouter(adminUsers: AdminUserRepository): Router {
   });
 
   router.post("/logout", verifyCsrf, (req, res) => {
-    req.session.destroy(() => {
+    req.session.destroy((error) => {
+      if (error) {
+        res.status(500).send("Logout failed. Please try again.");
+        return;
+      }
       res.redirect("/login");
     });
   });

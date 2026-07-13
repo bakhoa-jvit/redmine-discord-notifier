@@ -13,7 +13,7 @@ export function createAssigneeRouter(configRepository: ConfigRepository): Router
   router.post("/assignees", verifyCsrf, (req, res) => {
     try {
       configRepository.upsertAssignee({
-        redmineUserId: Number.parseInt(String(req.body?.redmineUserId ?? ""), 10),
+        redmineUserId: String(req.body?.redmineUserId ?? ""),
         discordId: String(req.body?.discordId ?? ""),
         note: req.body?.note ? String(req.body.note) : null,
       });

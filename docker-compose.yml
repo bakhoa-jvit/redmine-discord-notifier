@@ -16,7 +16,7 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
     ports:
-      - "${ADMIN_PORT:-3000}:3000"
+      - "${ADMIN_PORT:-3000}:${ADMIN_PORT:-3000}"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
