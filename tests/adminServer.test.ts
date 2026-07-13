@@ -147,3 +147,36 @@ test("rate limits repeated failed login attempts from the same client", async ()
   await ctx.close();
   ctx.db.close();
 });
+
+test("creates and deletes an assignee mapping", async () => {
+  const ctx = await startServer();
+  const result = await login(ctx.baseUrl, "admin", "correct-horse-battery-staple");
+
+  const assigneesPage = await fetch(`${ctx.baseUrl}/assignees`, { headers: { Cookie: result.cookies } });
+  const csrf = extractCsrf(await assigneesPage.text());
+
+  const createResponse = await fetch(`${ctx.baseUrl}/assignees`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: result.cookies },
+    body: new URLSearchParams({ redmineUserId: "7", discordId: "123456789012345678", note: "Ba Khoa", _csrf: csrf }).toString(),
+  });
+  assert.equal(createResponse.status, 302);
+
+  const listPage = await fetch(`${ctx.baseUrl}/assignees`, { headers: { Cookie: result.cookies } });
+  const listHtml = await listPage.text();
+  assert.match(listHtml, /123456789012345678/);
+
+  const deleteResponse = await fetch(`${ctx.baseUrl}/assignees/7/delete`, {
+    method: "POST",
+    redirect: "manual",
+    headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: result.cookies },
+    body: new URLSearchParams({ _csrf: csrf }).toString(),
+  });
+  assert.equal(deleteResponse.status, 302);
+
+  const afterDelete = await fetch(`${ctx.baseUrl}/assignees`, { headers: { Cookie: result.cookies } });
+  assert.doesNotMatch(await afterDelete.text(), /123456789012345678/);
+  await ctx.close();
+  ctx.db.close();
+});

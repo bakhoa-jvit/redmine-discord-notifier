@@ -5,6 +5,7 @@ import type { ConfigRepository } from "../state/configRepository.js";
 import { requireAuth } from "./authMiddleware.js";
 import { createAuthRouter } from "./authRoutes.js";
 import { createProjectRouter } from "./projectRoutes.js";
+import { createAssigneeRouter } from "./assigneeRoutes.js";
 
 export interface AdminServerDeps {
   configRepository: ConfigRepository;
@@ -36,6 +37,7 @@ export function createAdminServer(deps: AdminServerDeps): Express {
 
   app.get("/", (_req, res) => res.redirect("/projects"));
   app.use(requireAuth, createProjectRouter(deps.configRepository));
+  app.use(requireAuth, createAssigneeRouter(deps.configRepository));
 
   return app;
 }
