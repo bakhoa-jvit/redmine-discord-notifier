@@ -1,30 +1,10 @@
 import type { SqliteDatabase } from "./database.js";
 import { nowIso } from "../time.js";
 import { readFileSync } from "node:fs";
-
-export type EventType =
-  | "issue_created"
-  | "comment_added"
-  | "status_changed"
-  | "assignee_changed"
-  | "priority_changed";
-
-const allEventTypes: EventType[] = [
-  "issue_created",
-  "comment_added",
-  "status_changed",
-  "assignee_changed",
-  "priority_changed",
-];
+import { allEventTypes, type EventType, type ProjectConfig } from "../config.js";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const discordSnowflakePattern = /^\d{15,25}$/;
-
-export interface ProjectConfig {
-  id: string;
-  webhookUrl: string;
-  events: EventType[];
-}
 
 export interface AssigneeMapping {
   redmineUserId: number;

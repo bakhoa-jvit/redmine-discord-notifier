@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-
 export type EventType =
   | "issue_created"
   | "comment_added"
@@ -7,11 +5,18 @@ export type EventType =
   | "assignee_changed"
   | "priority_changed";
 
+export const allEventTypes: EventType[] = [
+  "issue_created",
+  "comment_added",
+  "status_changed",
+  "assignee_changed",
+  "priority_changed",
+];
+
 export interface ProjectConfig {
   id: string;
   webhookUrl: string;
   events: EventType[];
-  assigneeDiscordIds: Map<number, string>;
 }
 
 export interface AppConfig {
@@ -25,20 +30,15 @@ export interface AppConfig {
   sqlitePath: string;
   startupMode: "baseline";
   logLevel: "debug" | "info" | "warn" | "error";
-  projects: ProjectConfig[];
+  adminPort: number;
+  adminSessionSecret: string;
+  adminUsername: string;
+  adminPassword: string;
+  legacyProjectsConfigFile: string;
 }
-
-const defaultEvents: EventType[] = [
-  "issue_created",
-  "comment_added",
-  "status_changed",
-  "assignee_changed",
-  "priority_changed",
-];
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const startupMode = parseStartupMode(env.STARTUP_MODE || "baseline");
-
   const sqlitePath = env.SQLITE_PATH || "./data/notifier.sqlite";
   const logLevel = parseLogLevel(env.LOG_LEVEL || "info");
 
@@ -57,150 +57,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     sqlitePath,
     startupMode,
     logLevel,
-    projects: loadProjects(env),
+    adminPort: parsePositiveInt(env.ADMIN_PORT, 3000, "ADMIN_PORT"),
+    adminSessionSecret: requireEnv(env, "ADMIN_SESSION_SECRET"),
+    adminUsername: requireEnv(env, "ADMIN_USERNAME"),
+    adminPassword: requireEnv(env, "ADMIN_PASSWORD"),
+    legacyProjectsConfigFile: env.PROJECTS_CONFIG_FILE?.trim() || "./config/projects.json",
   };
-}
-
-function loadProjects(env: NodeJS.ProcessEnv): ProjectConfig[] {
-  if (env.PROJECTS_CONFIG_JSON && env.PROJECTS_CONFIG_JSON.trim() !== "") {
-    return parseProjectsJson(env.PROJECTS_CONFIG_JSON, "PROJECTS_CONFIG_JSON");
-  }
-
-  const projectsConfigPath = env.PROJECTS_CONFIG_FILE?.trim() || "./config/projects.json";
-  return parseProjectsFile(projectsConfigPath);
-}
-
-function parseProjectsFile(path: string): ProjectConfig[] {
-  let value: string;
-  try {
-    value = readFileSync(path, "utf8");
-  } catch (error) {
-    throw new Error(
-      `Cannot read projects config file ${path}. Copy config/projects.example.json to config/projects.json first. ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-  }
-
-  return parseProjectsJson(value, path);
-}
-
-function parseProjectsJson(value: string, source: string): ProjectConfig[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value) as unknown;
-  } catch (error) {
-    throw new Error(
-      `${source} must be valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  return parseProjects(parsed, source);
-}
-
-interface RawProjectConfig {
-  id?: unknown;
-  discordWebhookUrl?: unknown;
-  events?: unknown;
-  assigneeDiscordIds?: unknown;
-}
-
-function parseProjects(value: unknown, source: string): ProjectConfig[] {
-  if (!Array.isArray(value) || value.length === 0) {
-    throw new Error(`${source} must be a non-empty array`);
-  }
-
-  const seenProjectIds = new Set<string>();
-  return value.map((raw, index) => {
-    const project = raw as RawProjectConfig;
-    if (!project || typeof project !== "object") {
-      throw new Error(`${source}.projects[${index}] must be an object`);
-    }
-    if (typeof project.id !== "string" || project.id.trim() === "") {
-      throw new Error(`${source}.projects[${index}].id must be a non-empty string`);
-    }
-    if (typeof project.discordWebhookUrl !== "string" || project.discordWebhookUrl.trim() === "") {
-      throw new Error(`${source}.projects[${index}].discordWebhookUrl must be a non-empty string`);
-    }
-
-    const id = project.id.trim();
-    if (seenProjectIds.has(id)) {
-      throw new Error(`Duplicate project id in ${source}: ${id}`);
-    }
-    seenProjectIds.add(id);
-
-    return {
-      id,
-      webhookUrl: project.discordWebhookUrl.trim(),
-      events: parseProjectEvents(project.events, index, source),
-      assigneeDiscordIds: parseAssigneeDiscordIds(project.assigneeDiscordIds, index, source),
-    };
-  });
-}
-
-function parseProjectEvents(value: unknown, index: number, source: string): EventType[] {
-  if (value === undefined || value === null) {
-    return defaultEvents;
-  }
-  if (!Array.isArray(value)) {
-    throw new Error(`${source}.projects[${index}].events must be an array`);
-  }
-
-  const allowed = new Set<EventType>(defaultEvents);
-  const events = value.map((event) => {
-    if (typeof event !== "string" || event.trim() === "") {
-      throw new Error(`${source}.projects[${index}].events must contain strings`);
-    }
-    const trimmed = event.trim();
-    if (!allowed.has(trimmed as EventType)) {
-      throw new Error(`Unsupported event type in ${source}.projects[${index}].events: ${trimmed}`);
-    }
-    return trimmed as EventType;
-  });
-
-  return events;
-}
-
-const discordSnowflakePattern = /^\d{15,25}$/;
-
-function parseAssigneeDiscordIds(value: unknown, index: number, source: string): Map<number, string> {
-  if (value === undefined || value === null) {
-    return new Map();
-  }
-  if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${source}.projects[${index}].assigneeDiscordIds must be an object`);
-  }
-
-  const result = new Map<number, string>();
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const redmineUserId = Number.parseInt(key, 10);
-    if (!Number.isInteger(redmineUserId) || redmineUserId <= 0 || String(redmineUserId) !== key.trim()) {
-      throw new Error(
-        `${source}.projects[${index}].assigneeDiscordIds key "${key}" must be a positive Redmine user id`,
-      );
-    }
-    const discordId = extractDiscordId(raw);
-    if (!discordId || !discordSnowflakePattern.test(discordId)) {
-      throw new Error(
-        `${source}.projects[${index}].assigneeDiscordIds["${key}"] must be a Discord user id (numeric snowflake), ` +
-          `either directly as a string or as { "discordId": "..." }`,
-      );
-    }
-    result.set(redmineUserId, discordId);
-  }
-  return result;
-}
-
-function extractDiscordId(raw: unknown): string | null {
-  if (typeof raw === "string") {
-    return raw.trim();
-  }
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const discordId = (raw as { discordId?: unknown }).discordId;
-    if (typeof discordId === "string") {
-      return discordId.trim();
-    }
-  }
-  return null;
 }
 
 function trimTrailingSlash(value: string): string {

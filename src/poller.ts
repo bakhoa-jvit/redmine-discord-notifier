@@ -4,8 +4,24 @@ import { formatDiscordPayload } from "./discord/formatter.js";
 import type { Logger } from "./logger.js";
 import type { RedmineClient } from "./redmine/client.js";
 import { ReferenceDataCache } from "./redmine/referenceData.js";
+import type { ConfigRepository } from "./state/configRepository.js";
 import type { OutboxRepository, StateRepository } from "./state/repositories.js";
 import { addMs, isAfter, maxIso, nowIso } from "./time.js";
+
+export function initializeNewProjects(
+  projects: ProjectConfig[],
+  state: StateRepository,
+  logger: Logger,
+): void {
+  for (const project of projects) {
+    if (state.getProject(project.id)) {
+      continue;
+    }
+    const baselineAt = nowIso();
+    state.initializeProject(project.id, baselineAt);
+    logger.info("Initialized project baseline", { projectId: project.id, baselineAt });
+  }
+}
 
 export class Poller {
   private readonly referenceData: ReferenceDataCache;
@@ -14,6 +30,7 @@ export class Poller {
   constructor(
     private readonly config: AppConfig,
     private readonly redmine: RedmineClient,
+    private readonly configRepository: ConfigRepository,
     private readonly state: StateRepository,
     private readonly outbox: OutboxRepository,
     private readonly logger: Logger,
@@ -24,7 +41,7 @@ export class Poller {
   async initializeProjects(): Promise<void> {
     await this.referenceData.refresh();
 
-    for (const project of this.config.projects) {
+    for (const project of this.configRepository.listProjects()) {
       const current = this.state.getProject(project.id);
       if (current?.initialized) {
         if (this.config.skipMissedOnStart) {
@@ -43,12 +60,16 @@ export class Poller {
   }
 
   async pollOnce(): Promise<void> {
-    for (const project of this.config.projects) {
-      await this.pollProject(project);
+    const projects = this.configRepository.listProjects();
+    initializeNewProjects(projects, this.state, this.logger);
+    const assigneeDiscordIds = this.configRepository.getAssigneeDiscordIds();
+
+    for (const project of projects) {
+      await this.pollProject(project, assigneeDiscordIds);
     }
   }
 
-  private async pollProject(project: ProjectConfig): Promise<void> {
+  private async pollProject(project: ProjectConfig, assigneeDiscordIds: Map<number, string>): Promise<void> {
     const pollStartedAt = nowIso();
 
     try {
@@ -108,7 +129,7 @@ export class Poller {
             lastSeenJournalId: issueState?.lastSeenJournalId ?? null,
             statusNames: this.referenceData.getStatusNames(),
             priorityNames: this.referenceData.getPriorityNames(),
-            assigneeDiscordIds: project.assigneeDiscordIds,
+            assigneeDiscordIds,
           });
 
           for (const event of events) {

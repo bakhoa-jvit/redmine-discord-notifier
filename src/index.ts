@@ -6,6 +6,8 @@ import { Logger } from "./logger.js";
 import { OutboxSender } from "./outboxSender.js";
 import { Poller } from "./poller.js";
 import { RedmineClient } from "./redmine/client.js";
+import { AdminUserRepository } from "./state/adminUserRepository.js";
+import { ConfigRepository } from "./state/configRepository.js";
 import { openDatabase } from "./state/database.js";
 import { OutboxRepository, StateRepository } from "./state/repositories.js";
 import { sleep } from "./sleep.js";
@@ -16,10 +18,16 @@ async function main(): Promise<void> {
   const db = openDatabase(config.sqlitePath);
   const state = new StateRepository(db);
   const outbox = new OutboxRepository(db);
+  const configRepository = new ConfigRepository(db);
+  const adminUsers = new AdminUserRepository(db);
+
+  configRepository.importLegacyFileIfEmpty(config.legacyProjectsConfigFile, logger);
+  adminUsers.seedFromEnvIfEmpty(config.adminUsername, config.adminPassword);
+
   const redmine = new RedmineClient(config.redmineBaseUrl, config.redmineApiKey);
   const discord = new DiscordClient();
-  const poller = new Poller(config, redmine, state, outbox, logger);
-  const sender = new OutboxSender(config.projects, outbox, discord, logger);
+  const poller = new Poller(config, redmine, configRepository, state, outbox, logger);
+  const sender = new OutboxSender(configRepository, outbox, discord, logger);
   const abort = new AbortController();
 
   const shutdown = (signal: string) => {
@@ -32,7 +40,7 @@ async function main(): Promise<void> {
 
   await poller.initializeProjects();
   logger.info("Redmine Discord notifier started", {
-    projects: config.projects.map((project) => project.id),
+    projects: configRepository.listProjects().map((project) => project.id),
     pollIntervalMs: config.pollIntervalMs,
   });
 
