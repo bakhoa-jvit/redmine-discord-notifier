@@ -56,5 +56,29 @@ export function migrate(db: SqliteDatabase): void {
 
     CREATE INDEX IF NOT EXISTS idx_outbox_due
       ON notification_outbox (status, next_attempt_at);
+
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS projects (
+      id TEXT PRIMARY KEY,
+      discord_webhook_url TEXT NOT NULL,
+      events_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS assignee_discord_ids (
+      redmine_user_id INTEGER PRIMARY KEY,
+      discord_id TEXT NOT NULL,
+      note TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 }
