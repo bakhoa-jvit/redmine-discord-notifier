@@ -11,6 +11,7 @@ import { ConfigRepository } from "./state/configRepository.js";
 import { openDatabase } from "./state/database.js";
 import { OutboxRepository, StateRepository } from "./state/repositories.js";
 import { sleep } from "./sleep.js";
+import { createAdminServer } from "./admin/server.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -38,6 +39,15 @@ async function main(): Promise<void> {
   process.once("SIGINT", () => shutdown("SIGINT"));
   process.once("SIGTERM", () => shutdown("SIGTERM"));
 
+  const adminApp = createAdminServer({
+    configRepository,
+    adminUsers,
+    sessionSecret: config.adminSessionSecret,
+  });
+  const adminServer = adminApp.listen(config.adminPort, () => {
+    logger.info("Admin server listening", { port: config.adminPort });
+  });
+
   await poller.initializeProjects();
   logger.info("Redmine Discord notifier started", {
     projects: configRepository.listProjects().map((project) => project.id),
@@ -51,6 +61,7 @@ async function main(): Promise<void> {
   }
 
   await sender.sendDue();
+  await new Promise<void>((resolve) => adminServer.close(() => resolve()));
   db.close();
   logger.info("Redmine Discord notifier stopped");
 }
