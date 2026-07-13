@@ -22,7 +22,6 @@ async function main(): Promise<void> {
   const configRepository = new ConfigRepository(db);
   const adminUsers = new AdminUserRepository(db);
 
-  configRepository.importLegacyFileIfEmpty(config.legacyProjectsConfigFile, logger);
   adminUsers.seedFromEnvIfEmpty(config.adminUsername, config.adminPassword);
 
   const redmine = new RedmineClient(config.redmineBaseUrl, config.redmineApiKey);

@@ -8,7 +8,7 @@ Example:
 Redmine request failed: 404 Not Found ... project_id=another-project
 ```
 
-The project id is wrong, the project does not exist, or the API key cannot access it. Remove placeholder projects from `config/projects.json` or `PROJECTS_CONFIG_JSON`.
+The project id is wrong, the project does not exist, or the API key cannot access it. Check the project entry in the admin UI.
 
 ## Redmine DNS failure
 

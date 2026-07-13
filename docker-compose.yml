@@ -4,7 +4,6 @@ services:
     environment:
       REDMINE_BASE_URL: ${REDMINE_BASE_URL}
       REDMINE_API_KEY: ${REDMINE_API_KEY}
-      PROJECTS_CONFIG_FILE: ${PROJECTS_CONFIG_FILE:-./config/projects.json}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-60}
       POLL_OVERLAP_SECONDS: ${POLL_OVERLAP_SECONDS:-120}
       REDMINE_PAGE_LIMIT: ${REDMINE_PAGE_LIMIT:-100}
@@ -19,6 +18,5 @@ services:
     ports:
       - "${ADMIN_PORT:-3000}:3000"
     volumes:
-      - ./config/projects.json:/app/config/projects.json:ro
       - ./data:/app/data
     restart: unless-stopped

@@ -34,7 +34,6 @@ test("loads runtime config from env", () => {
   assert.equal(config.adminSessionSecret, "test-session-secret");
   assert.equal(config.adminUsername, "admin");
   assert.equal(config.adminPassword, "test-admin-password");
-  assert.equal(config.legacyProjectsConfigFile, "./config/projects.json");
 });
 
 test("can enable catch-up on service start", () => {
@@ -45,11 +44,6 @@ test("can enable catch-up on service start", () => {
 test("parses a custom ADMIN_PORT", () => {
   const config = loadConfig({ ...baseEnv, ADMIN_PORT: "8080" });
   assert.equal(config.adminPort, 8080);
-});
-
-test("parses a custom PROJECTS_CONFIG_FILE as the legacy import path", () => {
-  const config = loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: "./config/custom.json" });
-  assert.equal(config.legacyProjectsConfigFile, "./config/custom.json");
 });
 
 test("rejects missing REDMINE_API_KEY", () => {

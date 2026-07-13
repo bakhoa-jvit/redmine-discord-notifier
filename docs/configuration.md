@@ -55,15 +55,6 @@ Supported event types:
 - `assignee_changed`
 - `priority_changed`
 
-## One-Time Legacy Import
-
-If you're upgrading from a version that used `config/projects.json`, keep
-that file in place for the first boot after upgrading. On startup, if the
-`projects` table in SQLite is empty and the file exists, the service
-imports every project and its `assigneeDiscordIds` into SQLite once, then
-never reads the file again. Manage everything through the admin UI from
-that point on.
-
 ## Restart Catch-Up Behavior
 
 By default, the service does not send notifications for activity that

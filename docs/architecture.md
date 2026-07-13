@@ -40,9 +40,7 @@ src/
 
 1. Load `.env` runtime settings.
 2. Open SQLite and run migrations.
-3. Import `config/projects.json` once if the `projects` table is empty
-   (legacy migration), and seed the admin account if `admin_users` is
-   empty.
+3. Seed the admin account if `admin_users` is empty.
 4. Start the admin HTTP server (session-authenticated project/assignee
    management).
 5. Initialize a baseline for new projects.

@@ -49,10 +49,10 @@ back up the volume before any migration.
 
 ## Managing Projects
 
-There is no `PROJECTS_CONFIG_JSON` variable anymore. After the first
-deploy, open the admin UI (`/login` with `ADMIN_USERNAME`/
-`ADMIN_PASSWORD`) and add projects and assignee mappings there — changes
-apply on the next poll cycle without a redeploy.
+Projects are no longer configured through a JSON file or env variable.
+After the first deploy, open the admin UI (`/login` with
+`ADMIN_USERNAME`/`ADMIN_PASSWORD`) and add projects and assignee mappings
+there — changes apply on the next poll cycle without a redeploy.
 
 ## Common Railway Errors
 

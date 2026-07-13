@@ -51,12 +51,5 @@ Use this path in container deployments:
 SQLITE_PATH=/app/data/notifier.sqlite
 ```
 
-Project routing and the assignee mapping live inside this SQLite file once
-imported/created — back it up along with `./data` if you need to migrate
-the deployment.
-
-## One-Time Legacy Import
-
-`config/projects.json` (mounted read-only) is only read once, on the
-first boot where the `projects` table in SQLite is empty. After that,
-manage projects through the admin UI — the file is no longer consulted.
+Project routing and the assignee mapping live inside this SQLite file —
+back it up along with `./data` if you need to migrate the deployment.

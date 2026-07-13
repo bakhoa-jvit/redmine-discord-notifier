@@ -1,6 +1,5 @@
 import type { SqliteDatabase } from "./database.js";
 import { nowIso } from "../time.js";
-import { readFileSync } from "node:fs";
 import { allEventTypes, type EventType, type ProjectConfig } from "../config.js";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -24,13 +23,6 @@ interface AssigneeRow {
   redmine_user_id: number;
   discord_id: string;
   note: string | null;
-}
-
-interface LegacyProjectEntry {
-  id: string;
-  discordWebhookUrl: string;
-  events?: string[];
-  assigneeDiscordIds?: Record<string, string | { discordId: string; note?: string }>;
 }
 
 export class ConfigRepository {
@@ -113,68 +105,6 @@ export class ConfigRepository {
 
   deleteAssignee(redmineUserId: number): void {
     this.db.prepare("DELETE FROM assignee_discord_ids WHERE redmine_user_id = ?").run(redmineUserId);
-  }
-
-  importLegacyFileIfEmpty(
-    path: string,
-    logger: { warn(message: string, meta?: Record<string, unknown>): void },
-  ): void {
-    const existingCount = this.db.prepare("SELECT COUNT(*) as count FROM projects").get() as { count: number };
-    if (existingCount.count > 0) {
-      return;
-    }
-
-    let fileContent: string;
-    try {
-      fileContent = readFileSync(path, "utf8");
-    } catch {
-      return;
-    }
-
-    let entries: LegacyProjectEntry[];
-    try {
-      entries = JSON.parse(fileContent) as LegacyProjectEntry[];
-    } catch (error) {
-      logger.warn("Failed to parse legacy config file; skipping import", {
-        path,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return;
-    }
-
-    const importEntries = this.db.transaction((items: LegacyProjectEntry[]) => {
-      const seenAssigneeIds = new Set<number>();
-
-      for (const entry of items) {
-        this.createProject({
-          id: entry.id,
-          webhookUrl: entry.discordWebhookUrl,
-          events: entry.events ?? allEventTypes,
-        });
-
-        for (const [key, value] of Object.entries(entry.assigneeDiscordIds ?? {})) {
-          const redmineUserId = Number.parseInt(key, 10);
-          const discordId = typeof value === "string" ? value : value.discordId;
-          const note = typeof value === "string" ? null : value.note ?? null;
-
-          if (seenAssigneeIds.has(redmineUserId)) {
-            logger.warn("Duplicate assignee mapping during legacy import; keeping the first value", { redmineUserId });
-            continue;
-          }
-          seenAssigneeIds.add(redmineUserId);
-          this.upsertAssignee({ redmineUserId, discordId, note });
-        }
-      }
-    });
-
-    try {
-      importEntries(entries);
-    } catch (error) {
-      logger.warn("Failed to import legacy config file; rolling back", {
-        path,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
   }
 }
 
