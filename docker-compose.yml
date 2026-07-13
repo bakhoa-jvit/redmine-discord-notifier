@@ -5,7 +5,6 @@ services:
       REDMINE_BASE_URL: ${REDMINE_BASE_URL}
       REDMINE_API_KEY: ${REDMINE_API_KEY}
       PROJECTS_CONFIG_FILE: ${PROJECTS_CONFIG_FILE:-./config/projects.json}
-      PROJECTS_CONFIG_JSON: ${PROJECTS_CONFIG_JSON:-}
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-60}
       POLL_OVERLAP_SECONDS: ${POLL_OVERLAP_SECONDS:-120}
       REDMINE_PAGE_LIMIT: ${REDMINE_PAGE_LIMIT:-100}
@@ -13,6 +12,12 @@ services:
       SQLITE_PATH: ${SQLITE_PATH:-./data/notifier.sqlite}
       STARTUP_MODE: ${STARTUP_MODE:-baseline}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      ADMIN_PORT: ${ADMIN_PORT:-3000}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    ports:
+      - "${ADMIN_PORT:-3000}:3000"
     volumes:
       - ./config/projects.json:/app/config/projects.json:ro
       - ./data:/app/data
