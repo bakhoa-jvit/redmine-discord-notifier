@@ -84,3 +84,33 @@ test("updateProject rejects an unknown project id", () => {
   );
   db.close();
 });
+
+test("creates, lists, and deletes an assignee mapping", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+
+  repo.upsertAssignee({ redmineUserId: 7, discordId: "123456789012345678", note: "Ba Khoa" });
+  assert.deepEqual(repo.listAssignees(), [{ redmineUserId: 7, discordId: "123456789012345678", note: "Ba Khoa" }]);
+  assert.equal(repo.getAssigneeDiscordIds().get(7), "123456789012345678");
+
+  repo.upsertAssignee({ redmineUserId: 7, discordId: "999999999999999999", note: null });
+  assert.equal(repo.listAssignees()[0]?.discordId, "999999999999999999");
+
+  repo.deleteAssignee(7);
+  assert.equal(repo.listAssignees().length, 0);
+  db.close();
+});
+
+test("rejects a non-snowflake Discord id", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  assert.throws(() => repo.upsertAssignee({ redmineUserId: 7, discordId: "not-a-snowflake", note: null }), ValidationError);
+  db.close();
+});
+
+test("rejects a non-positive Redmine user id", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  assert.throws(() => repo.upsertAssignee({ redmineUserId: 0, discordId: "123456789012345678", note: null }), ValidationError);
+  db.close();
+});
