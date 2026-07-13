@@ -23,6 +23,7 @@ export function createProjectRouter(configRepository: ConfigRepository): Router 
         <tbody>${rows}</tbody>
       </table>
     `,
+        { csrfToken: token },
       ),
     );
   });
@@ -50,7 +51,7 @@ export function createProjectRouter(configRepository: ConfigRepository): Router 
   router.get("/projects/:id/edit", (req, res) => {
     const project = configRepository.getProject(req.params.id);
     if (!project) {
-      res.status(404).send(layout("Not found", "<p>Project not found.</p>"));
+      res.status(404).send(layout("Not found", "<p>Project not found.</p>", { csrfToken: ensureCsrfToken(req) }));
       return;
     }
     res.send(
@@ -163,5 +164,6 @@ function renderProjectForm(csrfToken: string, options: ProjectFormOptions): stri
       <div class="actions"><button type="submit">Save</button></div>
     </form>
   `,
+    { csrfToken },
   );
 }

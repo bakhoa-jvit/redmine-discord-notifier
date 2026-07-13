@@ -11,7 +11,7 @@ export function csrfField(token: string): string {
   return `<input type="hidden" name="_csrf" value="${escapeHtml(token)}">`;
 }
 
-export function layout(title: string, bodyHtml: string, options: { showNav?: boolean } = {}): string {
+export function layout(title: string, bodyHtml: string, options: { showNav?: boolean; csrfToken?: string } = {}): string {
   const nav =
     options.showNav === false
       ? ""
@@ -20,7 +20,10 @@ export function layout(title: string, bodyHtml: string, options: { showNav?: boo
       <a href="/projects">Projects</a>
       <a href="/assignees">Assignees</a>
       <a href="/account">Account</a>
-      <form method="post" action="/logout" style="display:inline"><button type="submit">Logout</button></form>
+      <form method="post" action="/logout" style="display:inline">
+        ${options.csrfToken ? csrfField(options.csrfToken) : ''}
+        <button type="submit">Logout</button>
+      </form>
     </nav>
   `;
   return `<!doctype html>
