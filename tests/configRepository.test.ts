@@ -173,3 +173,47 @@ test("does nothing when the legacy file does not exist", () => {
   assert.equal(repo.listProjects().length, 0);
   db.close();
 });
+
+test("does not throw and imports nothing when the legacy file has malformed JSON", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  const logger = new Logger("error");
+  const dir = "data/test-config-repository";
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "legacy-projects-malformed.json");
+  writeFileSync(path, "{ not valid json");
+
+  assert.doesNotThrow(() => repo.importLegacyFileIfEmpty(path, logger));
+
+  assert.equal(repo.listProjects().length, 0);
+  db.close();
+});
+
+test("rolls back the whole import when one entry in the legacy file is invalid", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  const logger = new Logger("error");
+  const dir = "data/test-config-repository";
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "legacy-projects-partial-invalid.json");
+  writeFileSync(
+    path,
+    JSON.stringify([
+      {
+        id: "data-index",
+        discordWebhookUrl: "https://discord.com/api/webhooks/1/abc",
+        events: ["comment_added"],
+      },
+      {
+        id: "bad-project",
+        discordWebhookUrl: "https://evil.example.com/hook",
+        events: ["comment_added"],
+      },
+    ]),
+  );
+
+  assert.doesNotThrow(() => repo.importLegacyFileIfEmpty(path, logger));
+
+  assert.equal(repo.listProjects().length, 0);
+  db.close();
+});

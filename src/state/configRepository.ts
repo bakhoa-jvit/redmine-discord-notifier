@@ -131,28 +131,49 @@ export class ConfigRepository {
       return;
     }
 
-    const entries = JSON.parse(fileContent) as LegacyProjectEntry[];
-    const seenAssigneeIds = new Set<number>();
-
-    for (const entry of entries) {
-      this.createProject({
-        id: entry.id,
-        webhookUrl: entry.discordWebhookUrl,
-        events: entry.events ?? allEventTypes,
+    let entries: LegacyProjectEntry[];
+    try {
+      entries = JSON.parse(fileContent) as LegacyProjectEntry[];
+    } catch (error) {
+      logger.warn("Failed to parse legacy config file; skipping import", {
+        path,
+        error: error instanceof Error ? error.message : String(error),
       });
+      return;
+    }
 
-      for (const [key, value] of Object.entries(entry.assigneeDiscordIds ?? {})) {
-        const redmineUserId = Number.parseInt(key, 10);
-        const discordId = typeof value === "string" ? value : value.discordId;
-        const note = typeof value === "string" ? null : value.note ?? null;
+    const importEntries = this.db.transaction((items: LegacyProjectEntry[]) => {
+      const seenAssigneeIds = new Set<number>();
 
-        if (seenAssigneeIds.has(redmineUserId)) {
-          logger.warn("Duplicate assignee mapping during legacy import; keeping the first value", { redmineUserId });
-          continue;
+      for (const entry of items) {
+        this.createProject({
+          id: entry.id,
+          webhookUrl: entry.discordWebhookUrl,
+          events: entry.events ?? allEventTypes,
+        });
+
+        for (const [key, value] of Object.entries(entry.assigneeDiscordIds ?? {})) {
+          const redmineUserId = Number.parseInt(key, 10);
+          const discordId = typeof value === "string" ? value : value.discordId;
+          const note = typeof value === "string" ? null : value.note ?? null;
+
+          if (seenAssigneeIds.has(redmineUserId)) {
+            logger.warn("Duplicate assignee mapping during legacy import; keeping the first value", { redmineUserId });
+            continue;
+          }
+          seenAssigneeIds.add(redmineUserId);
+          this.upsertAssignee({ redmineUserId, discordId, note });
         }
-        seenAssigneeIds.add(redmineUserId);
-        this.upsertAssignee({ redmineUserId, discordId, note });
       }
+    });
+
+    try {
+      importEntries(entries);
+    } catch (error) {
+      logger.warn("Failed to import legacy config file; rolling back", {
+        path,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 }

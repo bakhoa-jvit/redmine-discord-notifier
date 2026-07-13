@@ -19,7 +19,7 @@ export function createAdminServer(deps: AdminServerDeps): Express {
   const isProduction = deps.isProduction ?? process.env.NODE_ENV === "production";
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", isProduction);
+  app.set("trust proxy", isProduction ? 1 : false);
   app.use(express.urlencoded({ extended: false }));
   app.use(
     session({
