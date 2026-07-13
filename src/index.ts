@@ -48,21 +48,24 @@ async function main(): Promise<void> {
     logger.info("Admin server listening", { port: config.adminPort });
   });
 
-  await poller.initializeProjects();
-  logger.info("Redmine Discord notifier started", {
-    projects: configRepository.listProjects().map((project) => project.id),
-    pollIntervalMs: config.pollIntervalMs,
-  });
+  try {
+    await poller.initializeProjects();
+    logger.info("Redmine Discord notifier started", {
+      projects: configRepository.listProjects().map((project) => project.id),
+      pollIntervalMs: config.pollIntervalMs,
+    });
 
-  while (!abort.signal.aborted) {
-    await poller.pollOnce();
+    while (!abort.signal.aborted) {
+      await poller.pollOnce();
+      await sender.sendDue();
+      await sleep(config.pollIntervalMs, abort.signal);
+    }
+
     await sender.sendDue();
-    await sleep(config.pollIntervalMs, abort.signal);
+  } finally {
+    await new Promise<void>((resolve) => adminServer.close(() => resolve()));
+    db.close();
   }
-
-  await sender.sendDue();
-  await new Promise<void>((resolve) => adminServer.close(() => resolve()));
-  db.close();
   logger.info("Redmine Discord notifier stopped");
 }
 
