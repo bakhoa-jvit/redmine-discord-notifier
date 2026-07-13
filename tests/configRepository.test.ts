@@ -2,6 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { openDatabase } from "../src/state/database.js";
 import { ConfigRepository, ValidationError } from "../src/state/configRepository.js";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { Logger } from "../src/logger.js";
 
 test("creates, lists, updates and deletes a project", () => {
   const db = openDatabase(":memory:");
@@ -112,5 +115,61 @@ test("rejects a non-positive Redmine user id", () => {
   const db = openDatabase(":memory:");
   const repo = new ConfigRepository(db);
   assert.throws(() => repo.upsertAssignee({ redmineUserId: 0, discordId: "123456789012345678", note: null }), ValidationError);
+  db.close();
+});
+
+test("imports config/projects.json once when the projects table is empty", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  const logger = new Logger("error");
+  const dir = "data/test-config-repository";
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "legacy-projects.json");
+  writeFileSync(
+    path,
+    JSON.stringify([
+      {
+        id: "data-index",
+        discordWebhookUrl: "https://discord.com/api/webhooks/1/abc",
+        events: ["comment_added"],
+        assigneeDiscordIds: { "7": { discordId: "123456789012345678", note: "Ba Khoa" } },
+      },
+    ]),
+  );
+
+  repo.importLegacyFileIfEmpty(path, logger);
+
+  assert.equal(repo.listProjects().length, 1);
+  assert.equal(repo.getProject("data-index")?.webhookUrl, "https://discord.com/api/webhooks/1/abc");
+  assert.equal(repo.getAssigneeDiscordIds().get(7), "123456789012345678");
+  db.close();
+});
+
+test("does not re-import when the projects table already has data", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  const logger = new Logger("error");
+  repo.createProject({ id: "already-there", webhookUrl: "https://discord.com/api/webhooks/1/abc", events: ["comment_added"] });
+
+  const dir = "data/test-config-repository";
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, "legacy-projects-skip.json");
+  writeFileSync(path, JSON.stringify([{ id: "from-file", discordWebhookUrl: "https://discord.com/api/webhooks/2/def" }]));
+
+  repo.importLegacyFileIfEmpty(path, logger);
+
+  assert.equal(repo.listProjects().length, 1);
+  assert.equal(repo.getProject("from-file"), null);
+  db.close();
+});
+
+test("does nothing when the legacy file does not exist", () => {
+  const db = openDatabase(":memory:");
+  const repo = new ConfigRepository(db);
+  const logger = new Logger("error");
+
+  repo.importLegacyFileIfEmpty("data/test-config-repository/does-not-exist.json", logger);
+
+  assert.equal(repo.listProjects().length, 0);
   db.close();
 });
