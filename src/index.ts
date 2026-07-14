@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import { loadConfig } from "./config.js";
+import { DataCleanup } from "./dataCleanup.js";
 import { DiscordClient } from "./discord/client.js";
 import { Logger } from "./logger.js";
 import { OutboxSender } from "./outboxSender.js";
@@ -11,6 +12,7 @@ import { ConfigRepository } from "./state/configRepository.js";
 import { openDatabase } from "./state/database.js";
 import { OutboxRepository, StateRepository } from "./state/repositories.js";
 import { sleep } from "./sleep.js";
+import { nowIso } from "./time.js";
 import { createAdminServer } from "./admin/server.js";
 
 async function main(): Promise<void> {
@@ -28,6 +30,7 @@ async function main(): Promise<void> {
   const discord = new DiscordClient();
   const poller = new Poller(config, redmine, configRepository, state, outbox, logger);
   const sender = new OutboxSender(configRepository, outbox, discord, logger);
+  const dataCleanup = new DataCleanup(outbox, config.dataCleanupAfterMs, logger);
   const abort = new AbortController();
 
   const shutdown = (signal: string) => {
@@ -57,6 +60,7 @@ async function main(): Promise<void> {
     while (!abort.signal.aborted) {
       await poller.pollOnce();
       await sender.sendDue();
+      dataCleanup.runIfDue(nowIso());
       await sleep(config.pollIntervalMs, abort.signal);
     }
 

@@ -34,6 +34,7 @@ test("loads runtime config from env", () => {
   assert.equal(config.adminSessionSecret, "test-session-secret");
   assert.equal(config.adminUsername, "admin");
   assert.equal(config.adminPassword, "test-admin-password");
+  assert.equal(config.dataCleanupAfterMs, 2592000000);
 });
 
 test("can enable catch-up on service start", () => {
@@ -44,6 +45,11 @@ test("can enable catch-up on service start", () => {
 test("parses a custom ADMIN_PORT", () => {
   const config = loadConfig({ ...baseEnv, ADMIN_PORT: "8080" });
   assert.equal(config.adminPort, 8080);
+});
+
+test("parses a custom DATA_CLEANUP_AFTER_SECONDS", () => {
+  const config = loadConfig({ ...baseEnv, DATA_CLEANUP_AFTER_SECONDS: "60" });
+  assert.equal(config.dataCleanupAfterMs, 60000);
 });
 
 test("rejects missing REDMINE_API_KEY", () => {

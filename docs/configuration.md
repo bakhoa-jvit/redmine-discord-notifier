@@ -26,6 +26,8 @@ ADMIN_PORT=3000
 ADMIN_SESSION_SECRET=replace_with_a_long_random_string
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=replace_with_a_strong_password
+
+DATA_CLEANUP_AFTER_SECONDS=2592000
 ```
 
 `ADMIN_USERNAME`/`ADMIN_PASSWORD` only seed the single admin account the
@@ -70,3 +72,18 @@ activity after restart, set:
 ```env
 SKIP_MISSED_ON_START=false
 ```
+
+## Notification History Cleanup
+
+`notification_outbox` keeps a row per notification sent, forever, unless
+cleaned up. Once per poll cycle, the service checks whether
+`DATA_CLEANUP_AFTER_SECONDS` has elapsed since the last cleanup run; if so,
+it deletes `sent` rows older than that window (default 30 days):
+
+```env
+DATA_CLEANUP_AFTER_SECONDS=2592000
+```
+
+This only removes rows already marked `sent` — anything still `pending` or
+`failed` (awaiting retry) is never touched. `issues_state` (which issues
+have been seen) is not cleaned up by this mechanism.

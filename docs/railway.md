@@ -22,6 +22,7 @@ ADMIN_PORT=3000
 ADMIN_SESSION_SECRET=a-long-random-string
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=a-strong-password
+DATA_CLEANUP_AFTER_SECONDS=2592000
 ```
 
 Do not set Railway's service Config File path to `.env`. That field is for

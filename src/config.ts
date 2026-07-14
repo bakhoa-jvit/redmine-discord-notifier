@@ -34,6 +34,7 @@ export interface AppConfig {
   adminSessionSecret: string;
   adminUsername: string;
   adminPassword: string;
+  dataCleanupAfterMs: number;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -60,6 +61,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     adminSessionSecret: requireEnv(env, "ADMIN_SESSION_SECRET"),
     adminUsername: requireEnv(env, "ADMIN_USERNAME"),
     adminPassword: requireEnv(env, "ADMIN_PASSWORD"),
+    dataCleanupAfterMs: parsePositiveInt(env.DATA_CLEANUP_AFTER_SECONDS, 2592000, "DATA_CLEANUP_AFTER_SECONDS") * 1000,
   };
 }
 

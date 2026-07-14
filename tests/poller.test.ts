@@ -124,5 +124,6 @@ function createTestConfig(): AppConfig {
     adminSessionSecret: "test-session-secret",
     adminUsername: "admin",
     adminPassword: "test-admin-password",
+    dataCleanupAfterMs: 2592000000,
   };
 }
