@@ -1,19 +1,19 @@
-import type { ProjectConfig } from "./config.js";
 import type { DiscordClient } from "./discord/client.js";
 import type { Logger } from "./logger.js";
+import type { ConfigRepository } from "./state/configRepository.js";
 import type { OutboxRepository } from "./state/repositories.js";
 import { addMs, nowIso } from "./time.js";
 
 export class OutboxSender {
   constructor(
-    private readonly projects: ProjectConfig[],
+    private readonly configRepository: ConfigRepository,
     private readonly outbox: OutboxRepository,
     private readonly discord: DiscordClient,
     private readonly logger: Logger,
   ) {}
 
   async sendDue(): Promise<void> {
-    const projectById = new Map(this.projects.map((project) => [project.id, project]));
+    const projectById = new Map(this.configRepository.listProjects().map((project) => [project.id, project]));
     const due = this.outbox.listDue(25, nowIso());
 
     for (const item of due) {

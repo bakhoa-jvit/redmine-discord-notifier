@@ -2,18 +2,16 @@
 
 The service uses two configuration layers:
 
-- `.env` for runtime settings and shared secrets.
-- `config/projects.json` for project routing when running locally.
-
-Hosted platforms such as Railway can skip `config/projects.json` and use `PROJECTS_CONFIG_JSON` instead.
+- `.env` for runtime settings (Redmine connection, poller tuning, admin
+  credentials).
+- SQLite (`projects` and `assignee_discord_ids` tables) for project routing
+  and the shared assignee mapping, managed through the admin web UI.
 
 ## Runtime Variables
 
 ```env
 REDMINE_BASE_URL=https://redmine.example.com
 REDMINE_API_KEY=replace_with_your_personal_api_key
-
-PROJECTS_CONFIG_FILE=./config/projects.json
 
 POLL_INTERVAL_SECONDS=60
 POLL_OVERLAP_SECONDS=120
@@ -23,27 +21,45 @@ SKIP_MISSED_ON_START=true
 SQLITE_PATH=./data/notifier.sqlite
 STARTUP_MODE=baseline
 LOG_LEVEL=info
+
+ADMIN_PORT=3000
+ADMIN_SESSION_SECRET=replace_with_a_long_random_string
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=replace_with_a_strong_password
+
+DATA_CLEANUP_AFTER_SECONDS=2592000
 ```
 
-## Project Routing File
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` only seed the single admin account the
+first time the service boots with an empty `admin_users` table. After that,
+change the password from the admin UI's Account page — the env vars are
+no longer read.
 
-Create it from the example:
+## Admin Web UI
 
-```bash
-cp config/projects.example.json config/projects.json
-```
+Open `http://<host>:<ADMIN_PORT>/login` and sign in with the seeded admin
+account. From there:
 
-Example:
+- **Projects** — add/edit/delete a project's id, Discord webhook URL, and
+  enabled event types.
+- **Assignees** — manage the shared Redmine-user-id → Discord-id mapping,
+  across all projects.
+- **Account** — change the admin password.
 
-```json
-[
-  {
-    "id": "data-index",
-    "discordWebhookUrl": "https://discord.com/api/webhooks/...",
-    "events": ["comment_added", "status_changed"]
-  }
-]
-```
+Changes made through the UI apply on the poller's next cycle (no restart
+needed).
+
+### Assignee mapping is required to notify, not just to `@mention`
+
+A ticket only gets a Discord notification if its **current assignee** has an
+entry in the Assignees mapping. This applies to every event type
+(`issue_created`, `comment_added`, `status_changed`, `assignee_changed`,
+`priority_changed`) — if the assignee has no mapping, or the issue has no
+assignee at all, nothing is sent for that ticket, not even a message without
+a mention.
+
+To get notifications for a ticket, make sure whoever it's assigned to has a
+row in the Assignees page first.
 
 Supported event types:
 
@@ -53,53 +69,33 @@ Supported event types:
 - `assignee_changed`
 - `priority_changed`
 
-If `events` is omitted, all event types are enabled.
-
-## Tagging the Assignee on Discord
-
-Redmine only exposes a user's display name, not their Discord account, so pinging the assignee requires an explicit per-project mapping from Redmine user id to Discord user id (snowflake):
-
-```json
-[
-  {
-    "id": "data-index",
-    "discordWebhookUrl": "https://discord.com/api/webhooks/...",
-    "events": ["comment_added", "status_changed"],
-    "assigneeDiscordIds": {
-      "7": "123456789012345678",
-      "8": { "discordId": "234567890123456789", "note": "Le Dong" }
-    }
-  }
-]
-```
-
-- Keys are Redmine user ids (as they appear in `assigned_to.id` on an issue).
-- Values can be either a plain Discord user id string, or an object `{ "discordId": "...", "note": "..." }` — `note` is ignored by the app and is only there so the mapping is self-documenting (JSON has no comment syntax, so this is the supported way to label which entry belongs to whom).
-- To find a Discord user id, enable Developer Mode in Discord (User Settings > Advanced) and use "Copy User ID" on their profile.
-- The mention is sent in the webhook `content` field (not inside the embed), since Discord only delivers a real ping/notification for mentions placed there. `allowed_mentions` is scoped to that exact user id, so nothing else in the message can trigger an unintended ping.
-- If the current assignee has no entry in `assigneeDiscordIds` (or the issue has no assignee), the notification is sent as plain text with no mention — this is a silent fallback, not an error. The same applies if the mapped Discord id is no longer a member of the server: Discord just renders it as an unresolved mention without pinging anyone or failing the webhook call.
-- `assigneeDiscordIds` is optional and defaults to empty (no mentions) when omitted.
-
-## Railway JSON Variable
-
-For Railway, set this as a service variable instead of committing `config/projects.json`:
-
-```env
-PROJECTS_CONFIG_JSON=[{"id":"data-index","discordWebhookUrl":"https://discord.com/api/webhooks/...","events":["comment_added","status_changed"]}]
-```
-
-`PROJECTS_CONFIG_JSON` takes priority over `PROJECTS_CONFIG_FILE`.
-
 ## Restart Catch-Up Behavior
 
-By default, the service does not send notifications for activity that happened while it was stopped:
+By default, the service does not send notifications for activity that
+happened while it was stopped:
 
 ```env
 SKIP_MISSED_ON_START=true
 ```
 
-This prevents Discord spam after downtime. To catch up missed Redmine activity after restart, set:
+This prevents Discord spam after downtime. To catch up missed Redmine
+activity after restart, set:
 
 ```env
 SKIP_MISSED_ON_START=false
 ```
+
+## Notification History Cleanup
+
+`notification_outbox` keeps a row per notification sent, forever, unless
+cleaned up. Once per poll cycle, the service checks whether
+`DATA_CLEANUP_AFTER_SECONDS` has elapsed since the last cleanup run; if so,
+it deletes `sent` rows older than that window (default 30 days):
+
+```env
+DATA_CLEANUP_AFTER_SECONDS=2592000
+```
+
+This only removes rows already marked `sent` — anything still `pending` or
+`failed` (awaiting retry) is never touched. `issues_state` (which issues
+have been seen) is not cleaned up by this mechanism.

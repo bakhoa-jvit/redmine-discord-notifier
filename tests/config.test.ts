@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import { loadConfig } from "../src/config.js";
 
 const baseEnv = {
@@ -15,22 +13,13 @@ const baseEnv = {
   SKIP_MISSED_ON_START: "true",
   STARTUP_MODE: "baseline",
   LOG_LEVEL: "debug",
+  ADMIN_SESSION_SECRET: "test-session-secret",
+  ADMIN_USERNAME: "admin",
+  ADMIN_PASSWORD: "test-admin-password",
 };
 
-test("loads runtime config from env and projects from JSON file", () => {
-  const path = writeProjects("projects.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      events: ["comment_added", "status_changed"],
-    },
-    {
-      id: "doctor-health",
-      discordWebhookUrl: "https://discord.com/api/webhooks/doctor",
-    },
-  ]);
-
-  const config = loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path });
+test("loads runtime config from env", () => {
+  const config = loadConfig(baseEnv);
 
   assert.equal(config.redmineBaseUrl, "https://redmine.example.com");
   assert.equal(config.redmineApiKey, "secret");
@@ -41,166 +30,46 @@ test("loads runtime config from env and projects from JSON file", () => {
   assert.equal(config.skipMissedOnStart, true);
   assert.equal(config.sqlitePath, "./data/test.sqlite");
   assert.equal(config.logLevel, "debug");
-  assert.equal(config.projects.length, 2);
-  assert.deepEqual(config.projects[0]?.events, ["comment_added", "status_changed"]);
-  assert.equal(config.projects[1]?.events.includes("issue_created"), true);
+  assert.equal(config.adminPort, 3000);
+  assert.equal(config.adminSessionSecret, "test-session-secret");
+  assert.equal(config.adminUsername, "admin");
+  assert.equal(config.adminPassword, "test-admin-password");
+  assert.equal(config.dataCleanupAfterMs, 2592000000);
 });
 
 test("can enable catch-up on service start", () => {
-  const path = writeProjects("catch-up-projects.json", [
-    { id: "data-index", discordWebhookUrl: "https://discord.com/api/webhooks/data" },
-  ]);
-
-  const config = loadConfig({
-    ...baseEnv,
-    SKIP_MISSED_ON_START: "false",
-    PROJECTS_CONFIG_FILE: path,
-  });
-
+  const config = loadConfig({ ...baseEnv, SKIP_MISSED_ON_START: "false" });
   assert.equal(config.skipMissedOnStart, false);
 });
 
-test("loads projects from PROJECTS_CONFIG_JSON before file", () => {
-  const filePath = writeProjects("ignored-projects.json", [
-    { id: "from-file", discordWebhookUrl: "https://discord.com/api/webhooks/file" },
-  ]);
-
-  const config = loadConfig({
-    ...baseEnv,
-    PROJECTS_CONFIG_FILE: filePath,
-    PROJECTS_CONFIG_JSON: JSON.stringify([
-      {
-        id: "from-env",
-        discordWebhookUrl: "https://discord.com/api/webhooks/env",
-        events: ["comment_added"],
-      },
-    ]),
-  });
-
-  assert.equal(config.projects.length, 1);
-  assert.equal(config.projects[0]?.id, "from-env");
-  assert.deepEqual(config.projects[0]?.events, ["comment_added"]);
+test("parses a custom ADMIN_PORT", () => {
+  const config = loadConfig({ ...baseEnv, ADMIN_PORT: "8080" });
+  assert.equal(config.adminPort, 8080);
 });
 
-test("loads assigneeDiscordIds mapping, defaulting to empty when omitted", () => {
-  const path = writeProjects("assignee-map-projects.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      assigneeDiscordIds: { "7": "123456789012345678" },
-    },
-    { id: "doctor-health", discordWebhookUrl: "https://discord.com/api/webhooks/doctor" },
-  ]);
-
-  const config = loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path });
-
-  assert.equal(config.projects[0]?.assigneeDiscordIds.get(7), "123456789012345678");
-  assert.equal(config.projects[1]?.assigneeDiscordIds.size, 0);
+test("parses a custom DATA_CLEANUP_AFTER_SECONDS", () => {
+  const config = loadConfig({ ...baseEnv, DATA_CLEANUP_AFTER_SECONDS: "60" });
+  assert.equal(config.dataCleanupAfterMs, 60000);
 });
 
-test("loads assigneeDiscordIds entries written as { discordId, note } objects", () => {
-  const path = writeProjects("assignee-map-object-projects.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      assigneeDiscordIds: {
-        "7": "123456789012345678",
-        "8": { discordId: "234567890123456789", note: "Le Dong" },
-      },
-    },
-  ]);
-
-  const config = loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path });
-
-  assert.equal(config.projects[0]?.assigneeDiscordIds.get(7), "123456789012345678");
-  assert.equal(config.projects[0]?.assigneeDiscordIds.get(8), "234567890123456789");
-});
-
-test("rejects an assigneeDiscordIds object entry missing discordId", () => {
-  const path = writeProjects("assignee-map-object-missing.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      assigneeDiscordIds: { "8": { note: "Le Dong" } },
-    },
-  ]);
-
+test("rejects missing REDMINE_API_KEY", () => {
   assert.throws(
-    () => loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path }),
-    /assigneeDiscordIds\["8"\] must be a Discord user id/,
-  );
-});
-
-test("rejects a non-numeric Discord id in assigneeDiscordIds", () => {
-  const path = writeProjects("invalid-assignee-map.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      assigneeDiscordIds: { "7": "not-a-snowflake" },
-    },
-  ]);
-
-  assert.throws(
-    () => loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path }),
-    /assigneeDiscordIds\["7"\] must be a Discord user id/,
-  );
-});
-
-test("rejects a non-numeric Redmine user id key in assigneeDiscordIds", () => {
-  const path = writeProjects("invalid-assignee-key.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      assigneeDiscordIds: { abc: "123456789012345678" },
-    },
-  ]);
-
-  assert.throws(
-    () => loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path }),
-    /assigneeDiscordIds key "abc" must be a positive Redmine user id/,
-  );
-});
-
-test("rejects duplicate project ids", () => {
-  const path = writeProjects("duplicate-projects.json", [
-    { id: "data-index", discordWebhookUrl: "https://discord.com/api/webhooks/data" },
-    { id: "data-index", discordWebhookUrl: "https://discord.com/api/webhooks/doctor" },
-  ]);
-
-  assert.throws(() => loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path }), /Duplicate project id/);
-});
-
-test("rejects invalid project event", () => {
-  const path = writeProjects("invalid-event.json", [
-    {
-      id: "data-index",
-      discordWebhookUrl: "https://discord.com/api/webhooks/data",
-      events: ["comment_added", "unsupported"],
-    },
-  ]);
-
-  assert.throws(() => loadConfig({ ...baseEnv, PROJECTS_CONFIG_FILE: path }), /Unsupported event type/);
-});
-
-test("rejects missing Redmine API key env", () => {
-  const path = writeProjects("missing-api-key.json", [
-    { id: "data-index", discordWebhookUrl: "https://discord.com/api/webhooks/data" },
-  ]);
-
-  assert.throws(
-    () =>
-      loadConfig({
-        REDMINE_BASE_URL: "https://redmine.example.com",
-        PROJECTS_CONFIG_FILE: path,
-      }),
+    () => loadConfig({ REDMINE_BASE_URL: "https://redmine.example.com" }),
     /REDMINE_API_KEY/,
   );
 });
 
-function writeProjects(name: string, value: unknown): string {
-  const dir = "data/test-config";
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, name);
-  writeFileSync(path, JSON.stringify(value));
-  return path;
-}
+test("rejects missing ADMIN_SESSION_SECRET", () => {
+  const { ADMIN_SESSION_SECRET, ...rest } = baseEnv;
+  assert.throws(() => loadConfig(rest), /ADMIN_SESSION_SECRET/);
+});
+
+test("rejects missing ADMIN_USERNAME", () => {
+  const { ADMIN_USERNAME, ...rest } = baseEnv;
+  assert.throws(() => loadConfig(rest), /ADMIN_USERNAME/);
+});
+
+test("rejects missing ADMIN_PASSWORD", () => {
+  const { ADMIN_PASSWORD, ...rest } = baseEnv;
+  assert.throws(() => loadConfig(rest), /ADMIN_PASSWORD/);
+});

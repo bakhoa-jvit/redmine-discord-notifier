@@ -220,4 +220,11 @@ export class OutboxRepository {
       .get(eventKey);
     return Boolean(row);
   }
+
+  deleteSentBefore(cutoff: string): number {
+    const result = this.db
+      .prepare("DELETE FROM notification_outbox WHERE status = 'sent' AND sent_at < ?")
+      .run(cutoff);
+    return result.changes;
+  }
 }

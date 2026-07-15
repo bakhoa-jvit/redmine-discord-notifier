@@ -23,12 +23,11 @@ By default, `SKIP_MISSED_ON_START=true` also prevents a burst of catch-up notifi
 ```bash
 pnpm install
 cp .env.example .env
-cp config/projects.example.json config/projects.json
 pnpm run build
 pnpm start
 ```
 
-Edit `.env` with your Redmine/runtime settings, then edit `config/projects.json` with project routing and Discord webhooks. Do not commit either file.
+Edit `.env` with your Redmine/runtime settings, then open the admin UI to add project routing and Discord webhooks. Do not commit `.env`.
 
 ## Useful Commands
 

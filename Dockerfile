@@ -19,4 +19,5 @@ COPY package.json pnpm-lock.yaml* ./
 RUN pnpm install --prod --frozen-lockfile
 COPY --from=build /app/dist ./dist
 RUN mkdir -p /app/data
+EXPOSE 3000
 CMD ["node", "dist/src/index.js"]
