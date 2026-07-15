@@ -22,9 +22,13 @@ const detailEventMap: Record<string, EventType> = {
 };
 
 export function detectEvents(input: DetectEventsInput): DetectedEvent[] {
+  const assigneeDiscordId = resolveAssigneeDiscordId(input.issue, input.assigneeDiscordIds);
+  if (!assigneeDiscordId) {
+    return [];
+  }
+
   const enabled = new Set(input.project.events);
   const events: DetectedEvent[] = [];
-  const assigneeDiscordId = resolveAssigneeDiscordId(input.issue, input.assigneeDiscordIds);
 
   if (
     !input.knownIssue &&

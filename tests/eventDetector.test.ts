@@ -15,7 +15,33 @@ const project = {
   ] satisfies EventType[],
 };
 
+const mappedAssignee = { id: 7, name: "Linh" };
+const mappedAssigneeDiscordIds = new Map([[7, "123456789012345678"]]);
+
 test("detects issue creation after baseline", () => {
+  const issue = makeIssue({
+    created_on: "2026-07-09T01:01:00.000Z",
+    assigned_to: mappedAssignee,
+    journals: [],
+  });
+  const events = detectEvents({
+    project,
+    issue,
+    issueUrl: "https://redmine.example.com/issues/123",
+    baselineAt: "2026-07-09T01:00:00.000Z",
+    knownIssue: false,
+    lastSeenJournalId: null,
+    statusNames: new Map(),
+    priorityNames: new Map(),
+    assigneeDiscordIds: mappedAssigneeDiscordIds,
+  });
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.eventType, "issue_created");
+  assert.equal(events[0]?.eventKey, "project:doctor-health:issue:123:created");
+});
+
+test("produces no events at all when the issue's assignee has no Discord mapping", () => {
   const issue = makeIssue({ created_on: "2026-07-09T01:01:00.000Z", journals: [] });
   const events = detectEvents({
     project,
@@ -29,13 +55,12 @@ test("detects issue creation after baseline", () => {
     assigneeDiscordIds: new Map(),
   });
 
-  assert.equal(events.length, 1);
-  assert.equal(events[0]?.eventType, "issue_created");
-  assert.equal(events[0]?.eventKey, "project:doctor-health:issue:123:created");
+  assert.deepEqual(events, []);
 });
 
 test("detects comments and tracked field changes from new journals", () => {
   const issue = makeIssue({
+    assigned_to: mappedAssignee,
     journals: [
       {
         id: 10,
@@ -66,7 +91,7 @@ test("detects comments and tracked field changes from new journals", () => {
       [3, "Low"],
       [4, "High"],
     ]),
-    assigneeDiscordIds: new Map(),
+    assigneeDiscordIds: mappedAssigneeDiscordIds,
   });
 
   assert.deepEqual(
@@ -85,6 +110,7 @@ test("detects comments and tracked field changes from new journals", () => {
 
 test("falls back to a placeholder for unmapped status/priority ids", () => {
   const issue = makeIssue({
+    assigned_to: mappedAssignee,
     journals: [
       {
         id: 10,
@@ -103,7 +129,7 @@ test("falls back to a placeholder for unmapped status/priority ids", () => {
     lastSeenJournalId: 9,
     statusNames: new Map([[1, "New"]]),
     priorityNames: new Map(),
-    assigneeDiscordIds: new Map(),
+    assigneeDiscordIds: mappedAssigneeDiscordIds,
   });
 
   assert.equal(events[0]?.oldValue, "New");
@@ -140,7 +166,7 @@ test("resolves assignee changes using the current issue's assigned_to, falling b
   assert.equal(events[0]?.assigneeDiscordId, "123456789012345678");
 });
 
-test("leaves assigneeDiscordId null when the current assignee has no mapping", () => {
+test("produces no events when the current assignee is not in the mapping", () => {
   const issue = makeIssue({
     assigned_to: { id: 7, name: "Linh" },
     journals: [
@@ -164,11 +190,12 @@ test("leaves assigneeDiscordId null when the current assignee has no mapping", (
     assigneeDiscordIds: new Map([[99, "123456789012345678"]]),
   });
 
-  assert.equal(events[0]?.assigneeDiscordId, null);
+  assert.deepEqual(events, []);
 });
 
 test("skips old journals and blank comments", () => {
   const issue = makeIssue({
+    assigned_to: mappedAssignee,
     journals: [
       {
         id: 8,
@@ -194,7 +221,7 @@ test("skips old journals and blank comments", () => {
     lastSeenJournalId: 8,
     statusNames: new Map(),
     priorityNames: new Map(),
-    assigneeDiscordIds: new Map(),
+    assigneeDiscordIds: mappedAssigneeDiscordIds,
   });
 
   assert.equal(events.length, 0);
@@ -202,6 +229,7 @@ test("skips old journals and blank comments", () => {
 
 test("respects configured event types", () => {
   const issue = makeIssue({
+    assigned_to: mappedAssignee,
     journals: [
       {
         id: 10,
@@ -221,7 +249,7 @@ test("respects configured event types", () => {
     lastSeenJournalId: null,
     statusNames: new Map(),
     priorityNames: new Map(),
-    assigneeDiscordIds: new Map(),
+    assigneeDiscordIds: mappedAssigneeDiscordIds,
   });
 
   assert.deepEqual(events.map((event) => event.eventType), ["comment_added"]);

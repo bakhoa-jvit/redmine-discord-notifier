@@ -42,12 +42,24 @@ account. From there:
 
 - **Projects** — add/edit/delete a project's id, Discord webhook URL, and
   enabled event types.
-- **Assignees** — manage the shared Redmine-user-id → Discord-id mapping
-  used to `@mention` the assignee in notifications, across all projects.
+- **Assignees** — manage the shared Redmine-user-id → Discord-id mapping,
+  across all projects.
 - **Account** — change the admin password.
 
 Changes made through the UI apply on the poller's next cycle (no restart
 needed).
+
+### Assignee mapping is required to notify, not just to `@mention`
+
+A ticket only gets a Discord notification if its **current assignee** has an
+entry in the Assignees mapping. This applies to every event type
+(`issue_created`, `comment_added`, `status_changed`, `assignee_changed`,
+`priority_changed`) — if the assignee has no mapping, or the issue has no
+assignee at all, nothing is sent for that ticket, not even a message without
+a mention.
+
+To get notifications for a ticket, make sure whoever it's assigned to has a
+row in the Assignees page first.
 
 Supported event types:
 

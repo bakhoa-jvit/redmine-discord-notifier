@@ -55,7 +55,7 @@ function renderAssigneesPage(configRepository: ConfigRepository, csrfToken: stri
   return layout(
     "Assignee mapping",
     `
-    <p>Maps a Redmine user id to a Discord user id (snowflake) so notifications can mention the assignee. Shared across all projects.</p>
+    <p>Maps a Redmine user id to a Discord user id (snowflake). Shared across all projects. A ticket only gets notified when its current assignee has a mapping here &mdash; unmapped assignees mean no notification is sent at all.</p>
     ${errorHtml}
     <form method="post" action="/assignees">
       ${csrfField(csrfToken)}
